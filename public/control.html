@@ -71,11 +71,13 @@
   .score .rate small { font-size: 26px; margin-left: 2px; }
   .meter { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--leaf) 45%, #fff); overflow: hidden; margin: 10px 0 10px; }
   .meter > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--p2), var(--p3)); border-radius: 99px; transition: width 0.5s; }
-  .rec { display: flex; justify-content: center; gap: 18px; font-size: 14px; color: var(--ink2); }
+  .rec { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; color: var(--ink2); }
   .rec .num { font-size: 26px; color: var(--ink); margin-right: 2px; }
 
   button { font: inherit; cursor: pointer; border: 0; }
-  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .actions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
+  .actions .win, .actions .loss { grid-column: span 3; }
+  .actions .sub { grid-column: span 2; }
   .act {
     border-radius: 16px;
     padding: 16px 8px;
@@ -95,6 +97,7 @@
   .act.loss { color: #fff; background: linear-gradient(135deg, #a790ac, #6b5671); box-shadow: 0 8px 18px -8px #6b5671; }
   .act.sub { padding: 10px 8px; font-size: 14px; background: #fff; color: var(--ink); border: 1px solid var(--line); }
   .act.sub kbd { background: color-mix(in srgb, var(--p1) 70%, #fff); }
+  .act.draw { border-color: color-mix(in srgb, var(--leaf2) 45%, #fff); color: var(--leaf2); }
   .act.armed { background: #e0584f; color: #fff; border-color: #e0584f; }
   .act { white-space: nowrap; }
   @media (max-width: 340px) {
@@ -124,6 +127,7 @@
     outline-offset: 2px;
   }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row.row3 { grid-template-columns: 1fr 1fr 1fr; }
   .btn { padding: 9px 14px; border-radius: 10px; background: var(--p3); color: #fff; font-weight: 700; font-size: 14px; white-space: nowrap; }
   .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); text-decoration: none; text-align: center; }
   .hint { color: var(--ink2); line-height: 1.7; margin: 0; }
@@ -156,6 +160,26 @@
   .checks { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink); }
   .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .checks input { accent-color: var(--p3); width: 16px; height: 16px; }
+  .sub-h { font-size: 12px; color: var(--ink2); margin: 2px 0 -4px; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toggles label { position: relative; cursor: pointer; }
+  .toggles input { position: absolute; opacity: 0; pointer-events: none; }
+  .toggles span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px 6px 9px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink2);
+    font-size: 13px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .toggles span::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; }
+  .toggles input:checked + span { background: color-mix(in srgb, var(--p2) 22%, #fff); border-color: var(--p2); color: var(--ink); }
+  .toggles input:checked + span::before { background: var(--p3); border-color: var(--p3); }
+  .toggles input:focus-visible + span { outline: 2px solid var(--p3); outline-offset: 2px; }
   .urlbox { display: flex; gap: 6px; }
   .urlbox input { font-size: 12px; }
 
@@ -196,6 +220,7 @@
       <div class="rec">
         <span><span class="num" id="w">0</span> 勝</span>
         <span><span class="num" id="l">0</span> 敗</span>
+        <span><span class="num" id="d">0</span> 分</span>
         <span><span class="num" id="t">0</span> 戦</span>
       </div>
     </section>
@@ -205,16 +230,32 @@
         <svg viewBox="-25 -25 50 50" aria-hidden="true"><use href="#wr-flower"/></svg>勝ち +1<kbd>W</kbd>
       </button>
       <button class="act loss" data-act="loss">負け +1<kbd>L</kbd></button>
+      <button class="act sub draw" data-act="draw">引き分け<kbd>D</kbd></button>
       <button class="act sub" data-act="undo">取り消し<kbd>Z</kbd></button>
       <button class="act sub" data-act="reset" id="resetBtn">リセット</button>
     </section>
 
+    <details id="viewBox" open>
+      <summary>カウンターに表示する項目</summary>
+      <div class="body">
+        <p class="hint">オン・オフはすぐにカウンターへ反映されます。</p>
+        <div class="sub-h">数値</div>
+        <div class="toggles" id="viewNums"></div>
+        <div class="sub-h">飾り・演出</div>
+        <div class="toggles" id="viewDeco"></div>
+        <div class="checks">
+          <label><input type="checkbox" id="drawsInRate">勝率の計算に引き分けを含める</label>
+        </div>
+      </div>
+    </details>
+
     <details id="editBox">
       <summary>数値を直接入力</summary>
       <div class="body">
-        <div class="row">
+        <div class="row row3">
           <label class="f">勝ち<input type="number" id="editW" min="0" step="1"></label>
           <label class="f">負け<input type="number" id="editL" min="0" step="1"></label>
+          <label class="f">引き分け<input type="number" id="editD" min="0" step="1"></label>
         </div>
         <button class="btn" id="editApply">反映する</button>
       </div>
@@ -253,10 +294,6 @@
           </label>
         </div>
         <label class="f">大きさ（倍率）<input type="number" id="scale" min="0.3" max="4" step="0.1"></label>
-        <div class="checks">
-          <label><input type="checkbox" id="petals">花びらを降らせる</label>
-          <label><input type="checkbox" id="card">背景プレート</label>
-        </div>
         <div class="urlbox">
           <input type="text" id="counterUrl" readonly aria-label="カウンターのURL">
           <button class="btn" id="copyUrl">コピー</button>
@@ -287,14 +324,26 @@
   const stateKey = "winrate:control:" + id;
   let state = load(stateKey, null);
   if (!state || !Number.isInteger(state.wins) || !Number.isInteger(state.losses)) {
-    state = { wins: 0, losses: 0, history: [], t: 0 };
+    state = { wins: 0, losses: 0, draws: 0, history: [], t: 0 };
   }
+  if (!Number.isInteger(state.draws)) state.draws = 0;
   if (!Array.isArray(state.history)) state.history = [];
+
+  // カウンターに表示する項目
+  const VIEW_ITEMS = {
+    nums: { rate: "勝率", t: "試合数", w: "勝ち", l: "負け", d: "引き分け" },
+    deco: { deco: "花の飾り", card: "背景プレート", petals: "降る花びら", fx: "勝敗の演出" },
+  };
+  const viewKey = "winrate:view:" + id;
+  const view = Object.assign(
+    { rate: true, t: false, w: true, l: true, d: true, deco: true, card: true, petals: true, fx: true, drawsInRate: false },
+    load(viewKey, {})
+  );
 
   const savedConn = load("winrate:conn", null);
   const conn = Object.assign({ host: "127.0.0.1", port: 4455, password: "" }, savedConn);
   const opts = Object.assign(
-    { theme: "sakura", layout: "wreath", scale: 1, decimals: 1, petals: true, card: true },
+    { theme: "sakura", layout: "wreath", scale: 1, decimals: 1 },
     load("winrate:builder", {})
   );
 
@@ -306,13 +355,15 @@
   }
 
   function render() {
-    const total = state.wins + state.losses;
-    const rate = total ? (state.wins / total) * 100 : 0;
-    $("rate").textContent = total ? rate.toFixed(opts.decimals) : "—";
-    $("pct").style.visibility = total ? "visible" : "hidden";
+    const total = state.wins + state.losses + state.draws;
+    const denom = state.wins + state.losses + (view.drawsInRate ? state.draws : 0);
+    const rate = denom ? (state.wins / denom) * 100 : 0;
+    $("rate").textContent = denom ? rate.toFixed(opts.decimals) : "—";
+    $("pct").style.visibility = denom ? "visible" : "hidden";
     $("meter").style.width = rate + "%";
     $("w").textContent = state.wins;
     $("l").textContent = state.losses;
+    $("d").textContent = state.draws;
     $("t").textContent = total;
   }
 
@@ -334,7 +385,7 @@
   try { bc = new BroadcastChannel("winrateCounter"); } catch (e) {}
 
   function broadcast(last) {
-    const payload = { id, wins: state.wins, losses: state.losses, last, t: state.t };
+    const payload = { id, wins: state.wins, losses: state.losses, draws: state.draws, last, t: state.t, view };
     if (bc) bc.postMessage(payload);
     obs.emit(payload);
   }
@@ -352,11 +403,13 @@
   const actions = {
     win() { state.wins++; state.history.push("w"); commit("win"); },
     loss() { state.losses++; state.history.push("l"); commit("loss"); },
+    draw() { state.draws++; state.history.push("d"); commit("draw"); },
     undo() {
       const last = state.history.pop();
       if (!last) return toast("取り消せる操作がありません");
       if (last === "w" && state.wins > 0) state.wins--;
       if (last === "l" && state.losses > 0) state.losses--;
+      if (last === "d" && state.draws > 0) state.draws--;
       commit("undo");
     },
     reset() {
@@ -368,7 +421,7 @@
         return;
       }
       disarm();
-      state = { wins: 0, losses: 0, history: [], t: 0 };
+      state = { wins: 0, losses: 0, draws: 0, history: [], t: 0 };
       commit("reset");
       toast("リセットしました");
     },
@@ -388,18 +441,21 @@
     const k = e.key.toLowerCase();
     if (k === "w") actions.win();
     else if (k === "l") actions.loss();
+    else if (k === "d") actions.draw();
     else if (k === "z") actions.undo();
   });
 
   $("editBox").addEventListener("toggle", () => {
     $("editW").value = state.wins;
     $("editL").value = state.losses;
+    $("editD").value = state.draws;
   });
   $("editApply").addEventListener("click", () => {
-    const w = parseInt($("editW").value, 10), l = parseInt($("editL").value, 10);
-    if (!(w >= 0 && l >= 0)) return toast("0以上の整数を入力してください");
+    const [w, l, d] = ["editW", "editL", "editD"].map((k) => parseInt($(k).value || "0", 10));
+    if (!(w >= 0 && l >= 0 && d >= 0)) return toast("0以上の整数を入力してください");
     state.wins = w;
     state.losses = l;
+    state.draws = d;
     state.history = [];
     commit(null);
     toast("反映しました");
@@ -494,6 +550,24 @@
     obs.connect();
   });
 
+  // ── 表示する項目 ──
+  const toggleHTML = (items) =>
+    Object.entries(items)
+      .map(([k, name]) => `<label><input type="checkbox" data-view="${k}"><span>${name}</span></label>`)
+      .join("");
+  $("viewNums").innerHTML = toggleHTML(VIEW_ITEMS.nums);
+  $("viewDeco").innerHTML = toggleHTML(VIEW_ITEMS.deco);
+  document.querySelectorAll("[data-view]").forEach((c) => (c.checked = !!view[c.dataset.view]));
+  $("drawsInRate").checked = view.drawsInRate;
+
+  $("viewBox").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.view) view[t.dataset.view] = t.checked;
+    if (t.id === "drawsInRate") view.drawsInRate = t.checked;
+    store(viewKey, view);
+    commit("view");
+  });
+
   // ── カウンターURL作成 ──
   $("themes").innerHTML = Object.entries(Flowers.THEMES)
     .map(([k, name]) =>
@@ -507,8 +581,6 @@
     if (opts.layout !== "wreath") p.set("layout", opts.layout);
     if (opts.scale !== 1) p.set("scale", opts.scale);
     if (opts.decimals !== 1) p.set("decimals", opts.decimals);
-    if (!opts.petals) p.set("petals", "0");
-    if (!opts.card) p.set("card", "0");
     if (id !== "default") p.set("id", id);
     base.search = p.toString();
     return base.href;
@@ -519,8 +591,6 @@
     $("layout").value = opts.layout;
     $("decimals").value = opts.decimals;
     $("scale").value = opts.scale;
-    $("petals").checked = opts.petals;
-    $("card").checked = opts.card;
     const url = counterUrl();
     $("counterUrl").value = url;
     $("previewLink").href = url;
@@ -535,8 +605,6 @@
     if (t.id === "layout") opts.layout = t.value;
     if (t.id === "decimals") opts.decimals = parseInt(t.value, 10);
     if (t.id === "scale") opts.scale = Math.min(4, Math.max(0.3, parseFloat(t.value) || 1));
-    if (t.id === "petals") opts.petals = t.checked;
-    if (t.id === "card") opts.card = t.checked;
     store("winrate:builder", opts);
     syncBuilder();
     render();

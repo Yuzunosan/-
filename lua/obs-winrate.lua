@@ -7,24 +7,27 @@ obs = obslua
 local source_name = ""
 local format = ""
 local decimals = 1
-local wins, losses = 0, 0
+local wins, losses, draws = 0, 0, 0
+local draws_in_rate = false
 local history = {}
 local my_settings = nil
 local hotkeys = {}
 
 local function win_rate()
-  local total = wins + losses
-  if total == 0 then
+  local denom = wins + losses
+  if draws_in_rate then denom = denom + draws end
+  if denom == 0 then
     return string.format("%." .. decimals .. "f", 0)
   end
-  return string.format("%." .. decimals .. "f", wins / total * 100)
+  return string.format("%." .. decimals .. "f", wins / denom * 100)
 end
 
 local function render()
   local text = format
   text = text:gsub("{W}", tostring(wins))
   text = text:gsub("{L}", tostring(losses))
-  text = text:gsub("{T}", tostring(wins + losses))
+  text = text:gsub("{D}", tostring(draws))
+  text = text:gsub("{T}", tostring(wins + losses + draws))
   text = text:gsub("{R}", win_rate())
   return text
 end
@@ -33,6 +36,7 @@ local function update_text()
   if my_settings ~= nil then
     obs.obs_data_set_int(my_settings, "wins", wins)
     obs.obs_data_set_int(my_settings, "losses", losses)
+    obs.obs_data_set_int(my_settings, "draws", draws)
   end
   local src = obs.obs_get_source_by_name(source_name)
   if src == nil then return end
@@ -55,21 +59,29 @@ local function add_loss()
   update_text()
 end
 
+local function add_draw()
+  draws = draws + 1
+  table.insert(history, "d")
+  update_text()
+end
+
 local function undo()
   local last = table.remove(history)
   if last == "w" and wins > 0 then wins = wins - 1 end
   if last == "l" and losses > 0 then losses = losses - 1 end
+  if last == "d" and draws > 0 then draws = draws - 1 end
   update_text()
 end
 
 local function reset()
-  wins, losses, history = 0, 0, {}
+  wins, losses, draws, history = 0, 0, 0, {}
   update_text()
 end
 
 local actions = {
   { id = "win",   label = "勝ち +1",  fn = add_win },
   { id = "loss",  label = "負け +1",  fn = add_loss },
+  { id = "draw",  label = "引き分け +1", fn = add_draw },
   { id = "undo",  label = "取り消し", fn = undo },
   { id = "reset", label = "リセット", fn = reset },
 }
@@ -78,11 +90,12 @@ function script_description()
   return [[<b>勝率カウンター</b><br>
 テキストソースに勝敗と勝率を表示します。<br>
 ホットキーは 設定 &gt; ホットキー の「勝率: 〜」で割り当て。<br>
-表示形式: {W}=勝ち {L}=負け {T}=試合数 {R}=勝率]]
+表示形式: {W}=勝ち {L}=負け {D}=引き分け {T}=試合数 {R}=勝率<br>
+表示したくない項目は表示形式から消してください。]]
 end
 
 function script_defaults(settings)
-  obs.obs_data_set_default_string(settings, "format", "{W}勝 {L}敗  勝率 {R}%")
+  obs.obs_data_set_default_string(settings, "format", "{W}勝 {L}敗 {D}分  勝率 {R}%")
   obs.obs_data_set_default_int(settings, "decimals", 1)
 end
 
@@ -105,8 +118,10 @@ function script_properties()
 
   obs.obs_properties_add_text(p, "format", "表示形式", obs.OBS_TEXT_MULTILINE)
   obs.obs_properties_add_int(p, "decimals", "勝率の小数桁", 0, 3, 1)
+  obs.obs_properties_add_bool(p, "draws_in_rate", "勝率の計算に引き分けを含める")
   obs.obs_properties_add_int(p, "wins", "勝ち", 0, 1000000, 1)
   obs.obs_properties_add_int(p, "losses", "負け", 0, 1000000, 1)
+  obs.obs_properties_add_int(p, "draws", "引き分け", 0, 1000000, 1)
 
   for _, a in ipairs(actions) do
     obs.obs_properties_add_button(p, "btn_" .. a.id, a.label, function()
@@ -124,6 +139,8 @@ function script_update(settings)
   decimals = obs.obs_data_get_int(settings, "decimals")
   wins = obs.obs_data_get_int(settings, "wins")
   losses = obs.obs_data_get_int(settings, "losses")
+  draws = obs.obs_data_get_int(settings, "draws")
+  draws_in_rate = obs.obs_data_get_bool(settings, "draws_in_rate")
   update_text()
 end
 

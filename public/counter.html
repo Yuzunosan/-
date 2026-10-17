@@ -34,6 +34,7 @@
       0 1px 2px rgba(30, 10, 25, 0.9),
       0 2px 8px rgba(30, 10, 25, 0.6);
   }
+  .record { display: flex; align-items: baseline; white-space: nowrap; }
 
   /* 花の開き具合 */
   .fl { transition: transform 0.9s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.6s; }
@@ -52,12 +53,17 @@
     justify-content: center;
     line-height: 1;
   }
+  .wreath .rate-block { display: flex; flex-direction: column; align-items: center; }
   .wreath .label { font-size: 15px; letter-spacing: 0.4em; padding-left: 0.4em; opacity: 0.95; }
-  .wreath .rate { font-size: 80px; margin: 4px 0 0; letter-spacing: 0.01em; }
+  .wreath .rate-line { white-space: nowrap; margin-top: 4px; }
+  .wreath .rate { font-size: 80px; letter-spacing: 0.01em; }
   .wreath .pct { font-size: 32px; margin-left: 2px; }
   .wreath .orn { width: 120px; height: 18px; margin: 2px 0 8px; overflow: visible; }
-  .wreath .record { font-size: 17px; display: flex; gap: 14px; align-items: baseline; }
-  .wreath .record .num { font-size: 32px; margin-right: 3px; }
+  .wreath .record { font-size: 16px; gap: 12px; }
+  .wreath .record .num { font-size: 30px; margin-right: 2px; }
+  .wreath .record.solo { font-size: 20px; gap: 16px; }
+  .wreath .record.solo .num { font-size: 46px; }
+  .wreath .fit { transform-origin: 50% 50%; }
 
   /* ── ライン型 ── */
   .plate {
@@ -70,13 +76,14 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--p1) 35%, transparent), 0 6px 24px rgba(20, 5, 15, 0.35);
   }
   .plate.no-card { background: none; box-shadow: none; }
-  .plate .emblem { width: 86px; height: 86px; overflow: visible; filter: drop-shadow(0 2px 6px rgba(20, 5, 15, 0.45)); }
+  .plate .emblem { width: 86px; height: 86px; flex: none; overflow: visible; filter: drop-shadow(0 2px 6px rgba(20, 5, 15, 0.45)); }
   .plate .spin { animation: spin 40s linear infinite; transform-origin: 0 0; }
-  .plate .top { display: flex; align-items: baseline; gap: 6px; line-height: 1; white-space: nowrap; }
+  .plate .top { display: flex; align-items: baseline; gap: 22px; line-height: 1; white-space: nowrap; }
+  .plate .rate-block { display: flex; align-items: baseline; gap: 6px; }
   .plate .label { font-size: 16px; letter-spacing: 0.2em; margin-right: 4px; }
   .plate .rate { font-size: 54px; }
   .plate .pct { font-size: 24px; }
-  .plate .record { font-size: 16px; margin-left: 22px; display: flex; gap: 12px; align-items: baseline; }
+  .plate .record { font-size: 16px; gap: 12px; }
   .plate .record .num { font-size: 30px; margin-right: 2px; }
   .plate .vine { display: block; width: 360px; height: 44px; margin-top: 2px; overflow: visible; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -108,10 +115,14 @@
   const id = q.get("id") || "default";
   const decimals = Math.min(3, Math.max(0, parseInt(q.get("decimals") ?? "1", 10) || 0));
   const scale = Math.min(4, Math.max(0.3, parseFloat(q.get("scale")) || 1));
-  const usePetals = q.get("petals") !== "0";
-  const useCard = q.get("card") !== "0";
   const storeKey = "winrate:counter:" + id;
   const N = 10; // 10% ごとに花がひとつ咲く
+
+  // 表示する項目（操作パネルから切り替え）
+  const VIEW_DEFAULT = {
+    rate: true, t: false, w: true, l: true, d: true,
+    deco: true, card: true, petals: true, fx: true, drawsInRate: false,
+  };
 
   document.documentElement.dataset.theme = theme;
   document.getElementById("defs").innerHTML = Flowers.defs(theme);
@@ -123,9 +134,11 @@
   const rateHTML = `
     <span class="rate num" data-k="rate">—</span><span class="pct num" data-k="pct">%</span>`;
   const recordHTML = `
-    <div class="record">
-      <span><span class="num" data-k="w">0</span>勝</span>
-      <span><span class="num" data-k="l">0</span>敗</span>
+    <div class="record fit" data-v="record">
+      <span data-v="t"><span class="num" data-k="t">0</span>戦</span>
+      <span data-v="w"><span class="num" data-k="w">0</span>勝</span>
+      <span data-v="l"><span class="num" data-k="l">0</span>敗</span>
+      <span data-v="d"><span class="num" data-k="d">0</span>分</span>
     </div>`;
   const flowerHTML = (x, y, rot, size) => `
     <g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)}) scale(${size})">
@@ -157,18 +170,24 @@
               <stop offset="1" style="stop-color:var(--p2)"/>
             </linearGradient>
           </defs>
-          ${useCard ? `<circle r="94" fill="var(--card)"/>` : ""}
-          <circle r="87" fill="none" stroke="var(--p1)" stroke-opacity=".35" stroke-width="1" stroke-dasharray="1 5" stroke-linecap="round"/>
-          <circle r="${R}" fill="none" stroke="var(--leaf2)" stroke-width="2"/>
-          ${leaves}
-          <circle class="arc" r="${R}" fill="none" stroke="url(#arc-g)" stroke-width="6" stroke-linecap="round"
-            pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90)"/>
-          ${flowers}
+          <g data-v="card">
+            <circle r="94" fill="var(--card)"/>
+            <circle r="87" fill="none" stroke="var(--p1)" stroke-opacity=".35" stroke-width="1" stroke-dasharray="1 5" stroke-linecap="round"/>
+          </g>
+          <g data-v="deco">
+            <circle r="${R}" fill="none" stroke="var(--leaf2)" stroke-width="2"/>
+            ${leaves}
+            <circle class="arc" r="${R}" fill="none" stroke="url(#arc-g)" stroke-width="6" stroke-linecap="round"
+              pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" transform="rotate(-90)"/>
+            ${flowers}
+          </g>
         </svg>
         <div class="center txt-shadow">
-          <div class="label">勝率</div>
-          <div>${rateHTML}</div>
-          <svg class="orn" viewBox="-60 -9 120 18">
+          <div class="rate-block" data-v="rate">
+            <div class="label">勝率</div>
+            <div class="rate-line fit">${rateHTML}</div>
+          </div>
+          <svg class="orn" data-v="orn" viewBox="-60 -9 120 18">
             <path d="M-56 0H-12M12 0H56" stroke="var(--p1)" stroke-opacity=".8" stroke-width="1"/>
             <use href="#wr-leaf" transform="translate(-12 0) rotate(180) scale(.7)"/>
             <use href="#wr-leaf" transform="translate(12 0) scale(.7)"/>
@@ -195,14 +214,14 @@
       flowers += flowerHTML(x, yAt(x), 0, 0.62);
     }
     stage.innerHTML = `
-      <div class="plate${useCard ? "" : " no-card"}">
+      <div class="plate">
         <svg class="emblem" viewBox="-25 -25 50 50"><use class="spin" href="#wr-flower"/></svg>
         <div>
           <div class="top txt-shadow">
-            <span class="label">勝率</span>${rateHTML}
+            <span class="rate-block" data-v="rate"><span class="label">勝率</span>${rateHTML}</span>
             ${recordHTML}
           </div>
-          <svg class="vine" viewBox="0 0 ${W} 44">
+          <svg class="vine" data-v="deco" viewBox="0 0 ${W} 44">
             <path d="${d}" fill="none" stroke="var(--leaf2)" stroke-width="2" stroke-linecap="round"/>
             ${leaves}
             <path class="arc" d="${d}" fill="none" stroke="var(--p2)" stroke-width="4" stroke-linecap="round"
@@ -216,19 +235,53 @@
   layout === "line" ? buildLine() : buildWreath();
 
   const $ = (k) => stage.querySelector(`[data-k="${k}"]`);
-  const els = { rate: $("rate"), pct: $("pct"), w: $("w"), l: $("l") };
+  const els = { rate: $("rate"), pct: $("pct"), t: $("t"), w: $("w"), l: $("l"), d: $("d") };
   const arc = stage.querySelector(".arc");
+  const record = stage.querySelector(".record");
   const blooms = [...stage.querySelectorAll(".fl")].map((fl) => ({ fl, bud: fl.previousElementSibling }));
 
-  let state = { wins: 0, losses: 0, t: 0 };
+  let state = { wins: 0, losses: 0, draws: 0, t: 0 };
+  let view = { ...VIEW_DEFAULT };
+
+  function applyView() {
+    const shown = ["t", "w", "l", "d"].filter((k) => view[k]).length;
+    const on = {
+      ...view,
+      record: shown > 0,
+      orn: view.rate && shown > 0,
+    };
+    stage.querySelectorAll("[data-v]").forEach((el) => {
+      el.style.display = on[el.dataset.v] ? "" : "none";
+    });
+    record.classList.toggle("solo", !view.rate);
+    const plate = stage.querySelector(".plate");
+    if (plate) plate.classList.toggle("no-card", !view.card);
+    fit();
+  }
+
+  // リース内に収まるよう、はみ出す文字は縮める
+  function fit() {
+    const center = stage.querySelector(".wreath .center");
+    if (!center) return;
+    const max = center.clientWidth * 0.56;
+    stage.querySelectorAll(".fit").forEach((el) => {
+      el.style.transform = "";
+      const w = el.scrollWidth;
+      if (w > max) el.style.transform = `scale(${max / w})`;
+    });
+  }
 
   function render() {
-    const total = state.wins + state.losses;
-    const rate = total ? state.wins / total : 0;
-    els.rate.textContent = total ? (rate * 100).toFixed(decimals) : "—";
-    els.pct.style.visibility = total ? "visible" : "hidden";
-    els.w.textContent = state.wins;
-    els.l.textContent = state.losses;
+    const { wins, losses, draws } = state;
+    const total = wins + losses + draws;
+    const denom = wins + losses + (view.drawsInRate ? draws : 0);
+    const rate = denom ? wins / denom : 0;
+    els.rate.textContent = denom ? (rate * 100).toFixed(decimals) : "—";
+    els.pct.style.visibility = denom ? "visible" : "hidden";
+    els.t.textContent = total;
+    els.w.textContent = wins;
+    els.l.textContent = losses;
+    els.d.textContent = draws;
     arc.style.strokeDashoffset = 100 - rate * 100;
     blooms.forEach(({ fl, bud }, k) => {
       const b = Math.min(1, Math.max(0, rate * N - k));
@@ -236,6 +289,7 @@
       fl.style.opacity = b > 0 ? 0.4 + 0.6 * b : 0;
       bud.style.opacity = 1 - b;
     });
+    fit();
   }
 
   // ── 花びらの演出 ──
@@ -252,7 +306,7 @@
   }
 
   function ambientPetal() {
-    if (document.hidden || petalBox.childElementCount > 14) return;
+    if (!view.petals || document.hidden || petalBox.childElementCount > 14) return;
     const el = makePetal(rand(7, 13));
     const w = innerWidth, h = innerHeight;
     const x = rand(0, w), sway = rand(20, 50), r0 = rand(0, 360), spin = rand(-260, 260);
@@ -313,16 +367,22 @@
     });
 
   // ── 受信 ──
+  const count = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
+
   function receive(d) {
     if (!d || (d.id || "default") !== id) return;
     if (!Number.isInteger(d.wins) || !Number.isInteger(d.losses)) return;
     const fresh = (d.t || 0) > state.t;
-    state = { wins: Math.max(0, d.wins), losses: Math.max(0, d.losses), t: d.t || 0 };
-    try { localStorage.setItem(storeKey, JSON.stringify(state)); } catch (e) {}
+    state = { wins: count(d.wins), losses: count(d.losses), draws: count(d.draws), t: d.t || 0 };
+    if (d.view && typeof d.view === "object") view = { ...VIEW_DEFAULT, ...d.view };
+    try { localStorage.setItem(storeKey, JSON.stringify({ ...state, view })); } catch (e) {}
+    applyView();
     render();
-    if (!fresh) return;
+    if (!fresh || !view.fx) return;
     if (d.last === "win") { burst(); pulse(els.w); pulse(els.rate); }
     if (d.last === "loss") { scatter(); pulse(els.l); }
+    if (d.last === "draw") { pulse(els.d); }
+    if (["win", "loss", "draw"].includes(d.last)) pulse(els.t);
   }
 
   // OBS: 操作パネルから obs-websocket 経由で届くイベント
@@ -332,14 +392,17 @@
 
   try {
     const s = JSON.parse(localStorage.getItem(storeKey));
-    if (s && Number.isInteger(s.wins) && Number.isInteger(s.losses)) state = s;
+    if (s && Number.isInteger(s.wins) && Number.isInteger(s.losses)) {
+      state = { wins: count(s.wins), losses: count(s.losses), draws: count(s.draws), t: s.t || 0 };
+      if (s.view) view = { ...VIEW_DEFAULT, ...s.view };
+    }
   } catch (e) {}
+  applyView();
   render();
+  if (document.fonts) document.fonts.ready.then(fit);
 
-  if (usePetals) {
-    setInterval(ambientPetal, 900);
-    for (let i = 0; i < 4; i++) setTimeout(ambientPetal, i * 300);
-  }
+  setInterval(ambientPetal, 900);
+  for (let i = 0; i < 4; i++) setTimeout(ambientPetal, i * 300);
 })();
 </script>
 </body>
