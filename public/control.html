@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="ja" data-theme="sakura">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>勝率カウンター 操作パネル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="theme.css">
+<style>
+  :root {
+    --ink: #5a3a4b;
+    --ink2: #8d6a7c;
+    --paper: #fffafc;
+    --line: color-mix(in srgb, var(--p2) 35%, #fff);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Zen Maru Gothic", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--p1) 85%, transparent), transparent 60%),
+      radial-gradient(100% 50% at 100% 100%, color-mix(in srgb, var(--p1) 75%, transparent), transparent 60%),
+      var(--paper);
+    overflow-x: hidden;
+  }
+  .defs { position: absolute; width: 0; height: 0; }
+  .deco { position: fixed; pointer-events: none; opacity: 0.32; }
+  .deco.a { top: -46px; right: -46px; width: 170px; height: 170px; }
+  .deco.b { bottom: -60px; left: -60px; width: 210px; height: 210px; }
+  .num { font-family: "Cormorant Garamond", serif; font-weight: 700; font-variant-numeric: lining-nums; }
+
+  .wrap { position: relative; max-width: 460px; margin: 0 auto; padding: 14px 16px 24px; }
+  header { display: flex; align-items: center; gap: 8px; }
+  header svg { width: 28px; height: 28px; flex: none; }
+  h1 { font-size: 16px; margin: 0; flex: 1; letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill {
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #c9b3bf; }
+  .pill.ok::before { background: #4caf7d; box-shadow: 0 0 0 3px rgba(76, 175, 125, 0.2); }
+  .pill.wait::before { background: #e8b04a; }
+  .pill.err::before { background: #e0584f; }
+
+  .score {
+    margin-top: 12px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 12px 16px 14px;
+    text-align: center;
+    box-shadow: 0 10px 26px -14px color-mix(in srgb, var(--p3) 50%, transparent);
+  }
+  .score .lbl { font-size: 12px; letter-spacing: 0.3em; color: var(--ink2); }
+  .score .rate { font-size: 64px; line-height: 1; color: var(--p3); }
+  .score .rate small { font-size: 26px; margin-left: 2px; }
+  .meter { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--leaf) 45%, #fff); overflow: hidden; margin: 10px 0 10px; }
+  .meter > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--p2), var(--p3)); border-radius: 99px; transition: width 0.5s; }
+  .rec { display: flex; justify-content: center; gap: 18px; font-size: 14px; color: var(--ink2); }
+  .rec .num { font-size: 26px; color: var(--ink); margin-right: 2px; }
+
+  button { font: inherit; cursor: pointer; border: 0; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .act {
+    border-radius: 16px;
+    padding: 16px 8px;
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform 0.08s, filter 0.2s, background 0.2s;
+  }
+  .act:hover { filter: brightness(1.05); }
+  .act:active { transform: scale(0.97); }
+  .act kbd { font: 600 11px/1 system-ui, sans-serif; padding: 3px 5px; border-radius: 5px; background: rgba(255, 255, 255, 0.28); }
+  .act svg { width: 22px; height: 22px; flex: none; }
+  .act.win { color: #fff; background: linear-gradient(135deg, var(--p2), var(--p3)); box-shadow: 0 8px 18px -8px var(--p3); }
+  .act.loss { color: #fff; background: linear-gradient(135deg, #a790ac, #6b5671); box-shadow: 0 8px 18px -8px #6b5671; }
+  .act.sub { padding: 10px 8px; font-size: 14px; background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  .act.sub kbd { background: color-mix(in srgb, var(--p1) 70%, #fff); }
+  .act.armed { background: #e0584f; color: #fff; border-color: #e0584f; }
+  .act { white-space: nowrap; }
+  @media (max-width: 340px) {
+    .act kbd, .act svg { display: none; }
+  }
+
+  details { margin-top: 12px; background: rgba(255, 255, 255, 0.72); border: 1px solid var(--line); border-radius: 14px; }
+  summary { padding: 10px 14px; cursor: pointer; font-size: 14px; font-weight: 700; list-style: none; display: flex; align-items: center; gap: 8px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "›"; margin-left: auto; transition: transform 0.2s; font-size: 18px; line-height: 1; color: var(--ink2); }
+  details[open] summary::after { transform: rotate(90deg); }
+  .body { padding: 0 14px 14px; display: grid; gap: 10px; font-size: 13px; }
+  label.f { display: grid; gap: 4px; color: var(--ink2); }
+  input[type="text"], input[type="password"], input[type="number"], select {
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    width: 100%;
+    min-width: 0;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--p3) 60%, transparent);
+    outline-offset: 2px;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { padding: 9px 14px; border-radius: 10px; background: var(--p3); color: #fff; font-weight: 700; font-size: 14px; white-space: nowrap; }
+  .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); text-decoration: none; text-align: center; }
+  .hint { color: var(--ink2); line-height: 1.7; margin: 0; }
+  .hint b { color: var(--ink); }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .swatches label { position: relative; cursor: pointer; }
+  .swatches input { position: absolute; opacity: 0; pointer-events: none; }
+  .swatches span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 99px;
+    border: 1px solid #ecdbe4;
+    background: #fff;
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .swatches span::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, var(--core) 0 18%, var(--p2) 22%, var(--p1) 100%);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p3) 40%, transparent);
+  }
+  .swatches input:checked + span { border-color: var(--p3); box-shadow: 0 0 0 2px color-mix(in srgb, var(--p2) 55%, transparent); }
+  .swatches input:focus-visible + span { outline: 2px solid var(--p3); outline-offset: 2px; }
+  .checks { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink); }
+  .checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .checks input { accent-color: var(--p3); width: 16px; height: 16px; }
+  .urlbox { display: flex; gap: 6px; }
+  .urlbox input { font-size: 12px; }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translate(-50%, 20px);
+    background: var(--ink);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 99px;
+    font-size: 13px;
+    opacity: 0;
+    transition: 0.25s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  footer { margin-top: 14px; font-size: 12px; color: var(--ink2); text-align: center; }
+</style>
+</head>
+<body>
+  <svg class="defs" aria-hidden="true"><defs id="defs"></defs></svg>
+  <svg class="deco a" viewBox="-25 -25 50 50" aria-hidden="true"><use href="#wr-flower"/></svg>
+  <svg class="deco b" viewBox="-25 -25 50 50" aria-hidden="true"><use href="#wr-flower" transform="rotate(20)"/></svg>
+
+  <div class="wrap">
+    <header>
+      <svg viewBox="-25 -25 50 50" aria-hidden="true"><use href="#wr-flower"/></svg>
+      <h1>勝率カウンター</h1>
+      <button class="pill" id="status" title="OBS接続設定を開く">未接続</button>
+    </header>
+
+    <section class="score" aria-live="polite">
+      <div class="lbl">勝率</div>
+      <div class="rate num"><span id="rate">—</span><small id="pct">%</small></div>
+      <div class="meter"><div id="meter"></div></div>
+      <div class="rec">
+        <span><span class="num" id="w">0</span> 勝</span>
+        <span><span class="num" id="l">0</span> 敗</span>
+        <span><span class="num" id="t">0</span> 戦</span>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button class="act win" data-act="win">
+        <svg viewBox="-25 -25 50 50" aria-hidden="true"><use href="#wr-flower"/></svg>勝ち +1<kbd>W</kbd>
+      </button>
+      <button class="act loss" data-act="loss">負け +1<kbd>L</kbd></button>
+      <button class="act sub" data-act="undo">取り消し<kbd>Z</kbd></button>
+      <button class="act sub" data-act="reset" id="resetBtn">リセット</button>
+    </section>
+
+    <details id="editBox">
+      <summary>数値を直接入力</summary>
+      <div class="body">
+        <div class="row">
+          <label class="f">勝ち<input type="number" id="editW" min="0" step="1"></label>
+          <label class="f">負け<input type="number" id="editL" min="0" step="1"></label>
+        </div>
+        <button class="btn" id="editApply">反映する</button>
+      </div>
+    </details>
+
+    <details id="connBox">
+      <summary>OBS接続設定</summary>
+      <div class="body">
+        <p class="hint">OBSの <b>ツール → WebSocketサーバー設定</b> で「WebSocketサーバーを有効にする」をオンにし、「接続情報を表示」のパスワードを入力してください。</p>
+        <div class="row">
+          <label class="f">ホスト<input type="text" id="host" autocomplete="off"></label>
+          <label class="f">ポート<input type="number" id="port" min="1" max="65535"></label>
+        </div>
+        <label class="f">パスワード<input type="password" id="password" autocomplete="off"></label>
+        <button class="btn" id="connSave">保存して接続</button>
+      </div>
+    </details>
+
+    <details id="urlBox">
+      <summary>カウンターのURLを作成</summary>
+      <div class="body">
+        <div class="swatches" id="themes"></div>
+        <div class="row">
+          <label class="f">形
+            <select id="layout">
+              <option value="wreath">花のリース（円形）</option>
+              <option value="line">花のつる（横長）</option>
+            </select>
+          </label>
+          <label class="f">勝率の小数桁
+            <select id="decimals">
+              <option value="0">0（60%）</option>
+              <option value="1">1（60.0%）</option>
+              <option value="2">2（60.00%）</option>
+            </select>
+          </label>
+        </div>
+        <label class="f">大きさ（倍率）<input type="number" id="scale" min="0.3" max="4" step="0.1"></label>
+        <div class="checks">
+          <label><input type="checkbox" id="petals">花びらを降らせる</label>
+          <label><input type="checkbox" id="card">背景プレート</label>
+        </div>
+        <div class="urlbox">
+          <input type="text" id="counterUrl" readonly aria-label="カウンターのURL">
+          <button class="btn" id="copyUrl">コピー</button>
+        </div>
+        <p class="hint" id="sizeHint"></p>
+        <a class="btn ghost" id="previewLink" target="_blank" rel="noopener">プレビューを開く</a>
+      </div>
+    </details>
+
+    <footer>カウンターID: <span id="idLabel"></span></footer>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script src="flowers.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const q = new URLSearchParams(location.search);
+  const id = q.get("id") || "default";
+
+  const load = (k, def) => {
+    try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch (e) { return def; }
+  };
+  const store = (k, v) => {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
+  };
+
+  const stateKey = "winrate:control:" + id;
+  let state = load(stateKey, null);
+  if (!state || !Number.isInteger(state.wins) || !Number.isInteger(state.losses)) {
+    state = { wins: 0, losses: 0, history: [], t: 0 };
+  }
+  if (!Array.isArray(state.history)) state.history = [];
+
+  const savedConn = load("winrate:conn", null);
+  const conn = Object.assign({ host: "127.0.0.1", port: 4455, password: "" }, savedConn);
+  const opts = Object.assign(
+    { theme: "sakura", layout: "wreath", scale: 1, decimals: 1, petals: true, card: true },
+    load("winrate:builder", {})
+  );
+
+  // ── 表示 ──
+  function applyTheme() {
+    if (!Flowers.THEMES[opts.theme]) opts.theme = "sakura";
+    document.documentElement.dataset.theme = opts.theme;
+    $("defs").innerHTML = Flowers.defs(opts.theme);
+  }
+
+  function render() {
+    const total = state.wins + state.losses;
+    const rate = total ? (state.wins / total) * 100 : 0;
+    $("rate").textContent = total ? rate.toFixed(opts.decimals) : "—";
+    $("pct").style.visibility = total ? "visible" : "hidden";
+    $("meter").style.width = rate + "%";
+    $("w").textContent = state.wins;
+    $("l").textContent = state.losses;
+    $("t").textContent = total;
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    $("toast").textContent = msg;
+    $("toast").classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => $("toast").classList.remove("show"), 1800);
+  }
+
+  function setStatus(kind, text) {
+    $("status").className = "pill " + kind;
+    $("status").textContent = text;
+  }
+
+  // ── 送信 ──
+  let bc = null;
+  try { bc = new BroadcastChannel("winrateCounter"); } catch (e) {}
+
+  function broadcast(last) {
+    const payload = { id, wins: state.wins, losses: state.losses, last, t: state.t };
+    if (bc) bc.postMessage(payload);
+    obs.emit(payload);
+  }
+
+  function commit(last) {
+    state.t = Date.now();
+    store(stateKey, state);
+    render();
+    broadcast(last);
+  }
+
+  // ── 操作 ──
+  let resetTimer = null;
+  const resetBtn = $("resetBtn");
+  const actions = {
+    win() { state.wins++; state.history.push("w"); commit("win"); },
+    loss() { state.losses++; state.history.push("l"); commit("loss"); },
+    undo() {
+      const last = state.history.pop();
+      if (!last) return toast("取り消せる操作がありません");
+      if (last === "w" && state.wins > 0) state.wins--;
+      if (last === "l" && state.losses > 0) state.losses--;
+      commit("undo");
+    },
+    reset() {
+      // 誤操作防止：もう一度押すとリセット
+      if (!resetTimer) {
+        resetBtn.textContent = "もう一度押す";
+        resetBtn.classList.add("armed");
+        resetTimer = setTimeout(disarm, 2500);
+        return;
+      }
+      disarm();
+      state = { wins: 0, losses: 0, history: [], t: 0 };
+      commit("reset");
+      toast("リセットしました");
+    },
+  };
+  function disarm() {
+    clearTimeout(resetTimer);
+    resetTimer = null;
+    resetBtn.textContent = "リセット";
+    resetBtn.classList.remove("armed");
+  }
+
+  document.querySelectorAll("[data-act]").forEach((b) =>
+    b.addEventListener("click", () => actions[b.dataset.act]())
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, select, textarea")) return;
+    const k = e.key.toLowerCase();
+    if (k === "w") actions.win();
+    else if (k === "l") actions.loss();
+    else if (k === "z") actions.undo();
+  });
+
+  $("editBox").addEventListener("toggle", () => {
+    $("editW").value = state.wins;
+    $("editL").value = state.losses;
+  });
+  $("editApply").addEventListener("click", () => {
+    const w = parseInt($("editW").value, 10), l = parseInt($("editL").value, 10);
+    if (!(w >= 0 && l >= 0)) return toast("0以上の整数を入力してください");
+    state.wins = w;
+    state.losses = l;
+    state.history = [];
+    commit(null);
+    toast("反映しました");
+  });
+
+  // ── OBS (obs-websocket v5) ──
+  async function sha256(s) {
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return btoa(String.fromCharCode(...new Uint8Array(h)));
+  }
+
+  const obs = {
+    ws: null,
+    ready: false,
+    timer: null,
+    reqId: 0,
+    connect() {
+      clearTimeout(this.timer);
+      if (this.ws) { this.ws.onclose = null; this.ws.close(); }
+      this.ready = false;
+      if (!window.crypto || !crypto.subtle) return setStatus("err", "https で開いてください");
+      setStatus("wait", "接続中…");
+      let ws;
+      try { ws = new WebSocket(`ws://${conn.host}:${conn.port}`); }
+      catch (e) { return setStatus("err", "接続先が正しくありません"); }
+      this.ws = ws;
+      ws.onmessage = async (ev) => {
+        const m = JSON.parse(ev.data);
+        if (m.op === 0) {
+          const d = { rpcVersion: 1, eventSubscriptions: 0 };
+          const auth = m.d.authentication;
+          if (auth) {
+            if (!conn.password) {
+              ws.onclose = null;
+              ws.close();
+              setStatus("err", "パスワード未入力");
+              $("connBox").open = true;
+              return;
+            }
+            d.authentication = await sha256((await sha256(conn.password + auth.salt)) + auth.challenge);
+          }
+          ws.send(JSON.stringify({ op: 1, d }));
+        } else if (m.op === 2) {
+          this.ready = true;
+          setStatus("ok", "OBS接続中");
+          broadcast(null); // 接続したら現在の値を送り直す
+        } else if (m.op === 7 && !m.d.requestStatus.result) {
+          setStatus("err", "送信できません");
+          toast("OBSのブラウザソース連携が見つかりません: " + (m.d.requestStatus.comment || m.d.requestStatus.code));
+        }
+      };
+      ws.onclose = (e) => {
+        this.ready = false;
+        if (e.code === 4009) {
+          setStatus("err", "パスワードが違います");
+          $("connBox").open = true;
+          return;
+        }
+        setStatus("off", "未接続");
+        this.timer = setTimeout(() => this.connect(), 3000);
+      };
+    },
+    emit(payload) {
+      if (!this.ready) return;
+      this.ws.send(JSON.stringify({
+        op: 6,
+        d: {
+          requestType: "CallVendorRequest",
+          requestId: "wr" + ++this.reqId,
+          requestData: {
+            vendorName: "obs-browser",
+            requestType: "emit_event",
+            requestData: { event_name: "winrateCounter", event_data: payload },
+          },
+        },
+      }));
+    },
+  };
+
+  $("host").value = conn.host;
+  $("port").value = conn.port;
+  $("password").value = conn.password;
+  $("status").addEventListener("click", () => {
+    $("connBox").open = true;
+    $("connBox").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+  $("connSave").addEventListener("click", () => {
+    conn.host = $("host").value.trim() || "127.0.0.1";
+    conn.port = parseInt($("port").value, 10) || 4455;
+    conn.password = $("password").value;
+    store("winrate:conn", conn);
+    obs.connect();
+  });
+
+  // ── カウンターURL作成 ──
+  $("themes").innerHTML = Object.entries(Flowers.THEMES)
+    .map(([k, name]) =>
+      `<label><input type="radio" name="theme" value="${k}"><span data-theme="${k}">${name}</span></label>`)
+    .join("");
+
+  function counterUrl() {
+    const base = new URL(location.pathname.endsWith(".html") ? "counter.html" : "counter", location.href);
+    const p = new URLSearchParams();
+    p.set("theme", opts.theme);
+    if (opts.layout !== "wreath") p.set("layout", opts.layout);
+    if (opts.scale !== 1) p.set("scale", opts.scale);
+    if (opts.decimals !== 1) p.set("decimals", opts.decimals);
+    if (!opts.petals) p.set("petals", "0");
+    if (!opts.card) p.set("card", "0");
+    if (id !== "default") p.set("id", id);
+    base.search = p.toString();
+    return base.href;
+  }
+
+  function syncBuilder() {
+    document.querySelectorAll('input[name="theme"]').forEach((r) => (r.checked = r.value === opts.theme));
+    $("layout").value = opts.layout;
+    $("decimals").value = opts.decimals;
+    $("scale").value = opts.scale;
+    $("petals").checked = opts.petals;
+    $("card").checked = opts.card;
+    const url = counterUrl();
+    $("counterUrl").value = url;
+    $("previewLink").href = url;
+    const [w, h] = opts.layout === "line" ? [540, 160] : [380, 380];
+    $("sizeHint").innerHTML =
+      `ブラウザソースの推奨サイズ: <b>幅 ${Math.round(w * opts.scale)} × 高さ ${Math.round(h * opts.scale)}</b>`;
+  }
+
+  $("urlBox").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.name === "theme") { opts.theme = t.value; applyTheme(); }
+    if (t.id === "layout") opts.layout = t.value;
+    if (t.id === "decimals") opts.decimals = parseInt(t.value, 10);
+    if (t.id === "scale") opts.scale = Math.min(4, Math.max(0.3, parseFloat(t.value) || 1));
+    if (t.id === "petals") opts.petals = t.checked;
+    if (t.id === "card") opts.card = t.checked;
+    store("winrate:builder", opts);
+    syncBuilder();
+    render();
+  });
+
+  $("copyUrl").addEventListener("click", async () => {
+    const input = $("counterUrl");
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch (e) {
+      input.select();
+      document.execCommand("copy");
+    }
+    toast("URLをコピーしました");
+  });
+
+  // ── 起動 ──
+  $("idLabel").textContent = id;
+  applyTheme();
+  syncBuilder();
+  render();
+  if (!savedConn) $("connBox").open = true;
+  obs.connect();
+})();
+</script>
+</body>
+</html>

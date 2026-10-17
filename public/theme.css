@@ -1,0 +1,61 @@
+/* 花のテーマ（カウンター・操作パネル共通） */
+:root,
+[data-theme="sakura"] {
+  --p1: #ffe6f0;
+  --p2: #f7a6c6;
+  --p3: #e0628f;
+  --core: #fff3b0;
+  --core2: #f0b23e;
+  --leaf: #a3d4a8;
+  --leaf2: #4f9168;
+  --glow: rgba(247, 166, 198, 0.8);
+  --card: rgba(62, 26, 50, 0.52);
+}
+
+[data-theme="rose"] {
+  --p1: #ffc9d2;
+  --p2: #f2506e;
+  --p3: #a3143a;
+  --core: #ffd36b;
+  --core2: #b8461b;
+  --leaf: #7fb88a;
+  --leaf2: #2f6b45;
+  --glow: rgba(242, 80, 110, 0.7);
+  --card: rgba(54, 12, 24, 0.55);
+}
+
+[data-theme="kikyo"] {
+  --p1: #efe7ff;
+  --p2: #b39cfb;
+  --p3: #7344d8;
+  --core: #fff4cf;
+  --core2: #f0a93a;
+  --leaf: #9cc8aa;
+  --leaf2: #4b7d62;
+  --glow: rgba(179, 156, 251, 0.75);
+  --card: rgba(34, 22, 60, 0.55);
+}
+
+[data-theme="sunflower"] {
+  --p1: #fff4b8;
+  --p2: #fbcf2a;
+  --p3: #e08a0b;
+  --core: #8a4b16;
+  --core2: #3d1d06;
+  --leaf: #8fc070;
+  --leaf2: #3f6e2a;
+  --glow: rgba(251, 207, 42, 0.7);
+  --card: rgba(48, 32, 10, 0.55);
+}
+
+[data-theme="hydrangea"] {
+  --p1: #e0ecff;
+  --p2: #7fb0fb;
+  --p3: #5a52e0;
+  --core: #f1f4ff;
+  --core2: #b7c2fd;
+  --leaf: #87bda1;
+  --leaf2: #3b6e57;
+  --glow: rgba(127, 176, 251, 0.75);
+  --card: rgba(16, 26, 60, 0.55);
+}
