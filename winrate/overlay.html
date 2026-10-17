@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>勝率カウンター</title>
+<style>
+  :root {
+    --size: 48px;
+    --color: #ffffff;
+    --win: #4ade80;
+    --loss: #f87171;
+    --font: "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  }
+  html, body {
+    margin: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+  body {
+    font-family: var(--font);
+    color: var(--color);
+    font-weight: 800;
+    font-size: var(--size);
+    line-height: 1.2;
+    padding: 0.2em 0.3em;
+    -webkit-text-stroke: 0.06em #000;
+    paint-order: stroke fill;
+    text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.6);
+    user-select: none;
+  }
+  .wrap { display: inline-block; }
+  .counter { display: inline-flex; gap: 0.5em; align-items: baseline; white-space: nowrap; }
+  .win { color: var(--win); }
+  .loss { color: var(--loss); }
+  .rate small { font-size: 0.6em; }
+  .bar {
+    display: none;
+    height: 0.18em;
+    margin-top: 0.15em;
+    border-radius: 0.09em;
+    background: var(--loss);
+    overflow: hidden;
+    box-shadow: 0 0 0 0.03em #000;
+  }
+  .bar > div { height: 100%; background: var(--win); transition: width 0.3s; }
+  body.show-bar .bar { display: block; }
+
+  /* 操作パネル：マウスを乗せたときだけ表示（OBSの「対話」画面で操作） */
+  .panel {
+    position: fixed;
+    left: 8px;
+    bottom: 8px;
+    display: flex;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    font-size: 16px;
+    -webkit-text-stroke: 0;
+    text-shadow: none;
+  }
+  body:hover .panel, body.always-panel .panel { opacity: 1; }
+  .panel button {
+    font: 700 16px/1 var(--font);
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 6px;
+    background: #1f2937;
+    color: #fff;
+    cursor: pointer;
+  }
+  .panel button:hover { background: #374151; }
+  .panel .b-win { background: #15803d; }
+  .panel .b-loss { background: #b91c1c; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+  <div class="counter">
+    <span><span class="win" id="w">0</span>勝</span>
+    <span><span class="loss" id="l">0</span>敗</span>
+    <span class="rate"><small>勝率</small> <span id="r">0.0</span><small>%</small></span>
+  </div>
+  <div class="bar"><div id="bar" style="width:50%"></div></div>
+  </div>
+
+  <div class="panel">
+    <button class="b-win" data-act="win">勝ち +1 (W)</button>
+    <button class="b-loss" data-act="loss">負け +1 (L)</button>
+    <button data-act="undo">取り消し (Z)</button>
+    <button data-act="reset" id="resetBtn">リセット</button>
+  </div>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const root = document.documentElement.style;
+  const hex = (v) => (/^[0-9a-f]{3,8}$/i.test(v) ? "#" + v : v);
+
+  if (q.has("size")) root.setProperty("--size", parseInt(q.get("size"), 10) + "px");
+  if (q.has("color")) root.setProperty("--color", hex(q.get("color")));
+  if (q.has("win")) root.setProperty("--win", hex(q.get("win")));
+  if (q.has("loss")) root.setProperty("--loss", hex(q.get("loss")));
+  if (q.has("font")) root.setProperty("--font", q.get("font"));
+  if (q.get("bar") === "1") document.body.classList.add("show-bar");
+  if (q.get("panel") === "1") document.body.classList.add("always-panel");
+  const decimals = Math.min(3, Math.max(0, parseInt(q.get("decimals") ?? "1", 10) || 0));
+  const key = "winrate:" + (q.get("id") || "default");
+
+  let state = { wins: 0, losses: 0, history: [] };
+
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(key));
+      if (s && Number.isInteger(s.wins) && Number.isInteger(s.losses)) {
+        state = { wins: s.wins, losses: s.losses, history: Array.isArray(s.history) ? s.history : [] };
+      }
+    } catch (e) {}
+  }
+
+  function save() {
+    try { localStorage.setItem(key, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function render() {
+    const total = state.wins + state.losses;
+    const rate = total ? (state.wins / total) * 100 : 0;
+    document.getElementById("w").textContent = state.wins;
+    document.getElementById("l").textContent = state.losses;
+    document.getElementById("r").textContent = rate.toFixed(decimals);
+    document.getElementById("bar").style.width = (total ? rate : 50) + "%";
+  }
+
+  let resetArmed = null;
+  const resetBtn = document.getElementById("resetBtn");
+
+  const actions = {
+    win() { state.wins++; state.history.push("w"); },
+    loss() { state.losses++; state.history.push("l"); },
+    undo() {
+      const last = state.history.pop();
+      if (last === "w" && state.wins > 0) state.wins--;
+      if (last === "l" && state.losses > 0) state.losses--;
+    },
+    reset() {
+      // 誤操作防止：2秒以内にもう一度押すとリセット
+      if (!resetArmed) {
+        resetBtn.textContent = "もう一度押す";
+        resetArmed = setTimeout(() => { resetArmed = null; resetBtn.textContent = "リセット"; }, 2000);
+        return false;
+      }
+      clearTimeout(resetArmed);
+      resetArmed = null;
+      resetBtn.textContent = "リセット";
+      state = { wins: 0, losses: 0, history: [] };
+    },
+  };
+
+  function run(name) {
+    if (actions[name]() === false) return;
+    save();
+    render();
+  }
+
+  document.querySelectorAll(".panel button").forEach((b) =>
+    b.addEventListener("click", () => run(b.dataset.act))
+  );
+
+  document.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    if (k === "w") run("win");
+    else if (k === "l") run("loss");
+    else if (k === "z" || k === "backspace") run("undo");
+  });
+
+  // 同じブラウザの別タブ・別ソースと同期
+  window.addEventListener("storage", (e) => {
+    if (e.key === key) { load(); render(); }
+  });
+
+  load();
+  render();
+})();
+</script>
+</body>
+</html>
