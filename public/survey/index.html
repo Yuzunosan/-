@@ -321,6 +321,43 @@
   .empty { padding: 28px 16px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
   .empty b { display: block; color: var(--ink); margin-bottom: 4px; }
 
+  /* PDF用の紙面（画面外で組んで画像化する。紙なので常にライト配色） */
+  .pdf-root { position: absolute; left: -10000px; top: 0; width: 760px; }
+  .pdf-page {
+    --bg: #edf1f2; --surface: #ffffff; --field: #f6f8f9; --ink: #16252a; --ink2: #3b4d53; --muted: #5b6d73;
+    --line: #d2dcdf; --accent: #0b6b66; --accent-hover: #0b6b66; --on-accent: #ffffff; --accent-soft: #dbeeec; --shadow: transparent;
+    color-scheme: light;
+    width: 760px;
+    height: 1075px;
+    padding: 36px 36px 24px;
+    background: #ffffff;
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .pdf-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+  .pdf-foot { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; }
+  .pdf-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 2px solid var(--ink); }
+  .pdf-title { font-size: 22px; font-weight: 700; }
+  .pdf-sub { font-size: 12px; color: var(--muted); }
+  .pdf-head svg { width: 26px; height: 32px; }
+  .pdf-page .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
+  .pdf-page .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pdf-page .bars.has-x .bar-row, .pdf-page .bars-head { grid-template-columns: minmax(5.5em, 9.5em) minmax(0, 1fr) 6.5em; }
+  .pdf-page .bx, .pdf-page .bars-head span:last-child { display: block; }
+  .pdf-page .bl .sub { display: none; }
+  .pdf-page .card { break-inside: avoid; }
+  .pdf-sec h2 { font-size: 15px; margin: 0 0 8px; }
+  .pdf-voices { margin: 0; padding-left: 1.2em; font-size: 12px; line-height: 1.7; }
+  .pdf-voices span { color: var(--muted); }
+  .pdf-table { width: 100%; border-collapse: collapse; font-size: 11px; line-height: 1.45; }
+  .pdf-table th { text-align: left; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--ink); padding: 4px 6px; white-space: nowrap; }
+  .pdf-table td { border-bottom: 1px solid var(--line); padding: 5px 6px; vertical-align: top; overflow-wrap: anywhere; }
+  .pdf-table .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pdf-table .n { white-space: nowrap; overflow-wrap: normal; }
+  .filters .pdf-btn { margin-left: auto; }
+
   /* ツールチップ・トースト */
   .tip {
     position: fixed;
@@ -422,6 +459,7 @@
           <select id="fAge"><option value="">すべて</option></select>
         </label>
         <span class="hint" id="fNote"></span>
+        <button type="button" class="btn small pdf-btn" data-pdf>PDFで保存</button>
       </div>
       <div id="statsBody">
         <div class="kpis">
@@ -471,9 +509,10 @@
       <div class="list-h">
         <input id="q" type="search" placeholder="会社・理由・メモで検索" aria-label="一覧を検索">
         <button type="button" class="btn" id="copyTsv">表計算用にコピー</button>
+        <button type="button" class="btn" data-pdf>PDFで保存</button>
       </div>
       <div id="list"></div>
-      <p class="tiny">「表計算用にコピー」は表示中の一覧をコピーします。Excelやスプレッドシートにそのまま貼り付けられます。</p>
+      <p class="tiny">「表計算用にコピー」は表示中の一覧をコピーします。Excelやスプレッドシートにそのまま貼り付けられます。「PDFで保存」は集計のグラフと回答一覧をA4のPDFにします（年代で絞り込んでいるときは、その年代だけ）。</p>
     </section>
   </div>
 </div>
@@ -991,6 +1030,185 @@
   });
   statsPanel.addEventListener("focusout", hideTip);
   addEventListener("scroll", hideTip, { passive: true });
+
+  // ── PDFで保存（集計＋回答一覧をA4に組んで画像化） ──
+  const LIBS = [
+    ["https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js", "sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H"],
+    ["https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js", "sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"],
+  ];
+  const loadScript = ([src, integrity]) => new Promise((resolve, reject) => {
+    if ([...document.scripts].some((x) => x.src === src)) { resolve(); return; }
+    const el = document.createElement("script");
+    el.src = src;
+    el.integrity = integrity;
+    el.crossOrigin = "anonymous";
+    el.onload = resolve;
+    el.onerror = () => reject(new Error("load"));
+    document.head.appendChild(el);
+  });
+
+  function pdfBlocks() {
+    renderStats();
+    const sample = showingSample();
+    const list = source();
+    const s = calc(list);
+    const age = ageFilter();
+    const strip = (el) => { el.removeAttribute("id"); el.querySelectorAll("[id]").forEach((x) => x.removeAttribute("id")); return el; };
+    const card = (sel) => strip($(sel).closest(".card").cloneNode(true));
+    const blocks = [];
+
+    const head = document.createElement("div");
+    head.className = "pdf-head";
+    head.innerHTML = `<div><div class="pdf-title">スマホ聞き取り結果${sample ? "（入力例）" : ""}</div>
+      <div class="pdf-sub">対象: ${esc(age || "全員")}・${s.n}人　作成: ${esc(fmtDate(today()))}</div></div>` + $(".brand svg").outerHTML;
+    blocks.push(head);
+    blocks.push(strip($("#statsBody .kpis").cloneNode(true)));
+
+    const co = card("#cCo");
+    const seg = co.querySelector(".seg");
+    if (seg) {
+      const note = document.createElement("span");
+      note.className = "hint";
+      note.textContent = groupMode === "group" ? "会社グループ別" : "ブランド別";
+      seg.replaceWith(note);
+    }
+    blocks.push(co);
+    for (const pair of [["#cReason", "#cFee"], ["#cIntent", "#cAge"]]) {
+      const row = document.createElement("div");
+      row.className = "cards";
+      pair.forEach((sel) => row.appendChild(card(sel)));
+      blocks.push(row);
+    }
+
+    const voices = [...list].sort((x, y) => y.updatedAt - x.updatedAt).filter((a) => a.reasonText).slice(0, 8);
+    if (voices.length) {
+      const v = document.createElement("div");
+      v.className = "pdf-sec";
+      v.innerHTML = `<h2>主な声</h2><ul class="pdf-voices">${voices.map((a) => `<li>${esc(a.reasonText)} <span>（${esc([a.age, coName(a)].filter(Boolean).join("・"))}）</span></li>`).join("")}</ul>`;
+      blocks.push(v);
+    }
+
+    const rows = [...list].sort((x, y) => (x.date || "").localeCompare(y.date || "") || x.createdAt - y.createdAt).map((a) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = [
+        esc(fmtDate(a.date, false)), esc(a.nick), esc(a.age), esc(coName(a)),
+        num(a.fee) ? yen(num(a.fee)) + (a.devIncl ? "*" : "") : "",
+        esc(a.reasons.join("、")), a.sat ? `${a.sat}/5` : "", esc(a.intent),
+      ].map((v, i) => `<td${i === 4 || i === 6 ? ' class="r"' : i === 0 || i === 2 || i === 7 ? ' class="n"' : ""}>${v}</td>`).join("");
+      return tr;
+    });
+    if (rows.length) blocks.push({ title: `回答一覧（${rows.length}人）${s.devIncl ? "　*は端末代込み" : ""}`, rows });
+    return { blocks, sample, age };
+  }
+
+  function newPdfPage(root) {
+    const page = document.createElement("div");
+    page.className = "pdf-page";
+    page.innerHTML = `<div class="pdf-body"></div><div class="pdf-foot"><span>スマホ聞き取り集計</span><span class="pdf-no"></span></div>`;
+    root.appendChild(page);
+    return page.firstElementChild;
+  }
+  const overflows = (body) => body.scrollHeight > body.clientHeight + 1;
+
+  // 1ページに収まるだけ詰め、はみ出したら次のページへ。一覧は行の途中で切らない
+  function layoutPdf(root, blocks) {
+    let body = newPdfPage(root);
+    const place = (el) => {
+      body.appendChild(el);
+      if (overflows(body) && body.children.length > 1) {
+        el.remove();
+        body = newPdfPage(root);
+        body.appendChild(el);
+      }
+    };
+    for (const b of blocks) {
+      if (b instanceof Element) { place(b); continue; }
+      const sec = (title) => {
+        const d = document.createElement("div");
+        d.className = "pdf-sec";
+        d.innerHTML = `<h2>${esc(title)}</h2><table class="pdf-table"><thead><tr><th>日付</th><th>呼び名</th><th>年代</th><th>会社</th><th class="r">月額</th><th>選んだ理由</th><th class="r">満足度</th><th>乗り換え</th></tr></thead><tbody></tbody></table>`;
+        return d;
+      };
+      let title = b.title;
+      let d = sec(title);
+      place(d);
+      let tbody = d.querySelector("tbody");
+      for (const tr of b.rows) {
+        tbody.appendChild(tr);
+        if (!overflows(body)) continue;
+        tr.remove();
+        if (tbody.children.length) title = "回答一覧（つづき）";
+        else d.remove();
+        body = newPdfPage(root);
+        d = sec(title);
+        body.appendChild(d);
+        tbody = d.querySelector("tbody");
+        tbody.appendChild(tr);
+      }
+    }
+    const pages = [...root.querySelectorAll(".pdf-page")];
+    pages.forEach((p, i) => { p.querySelector(".pdf-no").textContent = `${i + 1} / ${pages.length}`; });
+    return pages;
+  }
+
+  async function savePdfFile(blob, filename) {
+    if (window.claude && typeof window.claude.use === "function") {
+      let dl = null;
+      try { dl = await window.claude.use("downloads"); } catch (e) { dl = null; }
+      if (dl) {
+        try {
+          await dl.save({ filename, data: blob });
+          toast("PDFを保存しました");
+        } catch (e) {
+          toast(e && e.code === "declined" ? "PDFの保存をやめました" : "このページではPDFを保存できませんでした");
+        }
+        return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    toast("PDFを保存しました");
+  }
+
+  let pdfBusy = false;
+  async function makePdf() {
+    if (pdfBusy) return;
+    if (!loaded) { toast("読み込みが終わってから押してください"); return; }
+    pdfBusy = true;
+    const btns = document.querySelectorAll("[data-pdf]");
+    btns.forEach((b) => { b.disabled = true; b.textContent = "PDFを作成中…"; });
+    const root = document.createElement("div");
+    root.className = "pdf-root";
+    root.setAttribute("aria-hidden", "true");
+    try {
+      await Promise.all(LIBS.map(loadScript));
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const { blocks, sample, age } = pdfBlocks();
+      document.body.appendChild(root);
+      const pages = layoutPdf(root, blocks);
+      const pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      for (let i = 0; i < pages.length; i++) {
+        const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff", logging: false });
+        if (i) pdf.addPage();
+        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297);
+      }
+      const name = `スマホ聞き取り結果${sample ? "_入力例" : ""}${age ? "_" + age : ""}_${today()}.pdf`;
+      await savePdfFile(pdf.output("blob"), name);
+    } catch (e) {
+      toast(e && e.message === "load" ? "PDFの部品を読み込めませんでした。通信状態を確かめてください" : "PDFを作れませんでした");
+    } finally {
+      root.remove();
+      pdfBusy = false;
+      btns.forEach((b) => { b.disabled = false; b.textContent = "PDFで保存"; });
+    }
+  }
+  document.querySelectorAll("[data-pdf]").forEach((b) => b.addEventListener("click", makePdf));
 
   // ── 表示の切り替え ──
   const wide = matchMedia("(min-width: 900px)");
