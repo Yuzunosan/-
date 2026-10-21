@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>スマホ聞き取り集計</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* レイアウト: 左に聞き取り票（1人ずつ記入）、右に集計。スマホでは「入力・集計・一覧」を切り替え */
+  :root {
+    --bg: #edf1f2;
+    --surface: #ffffff;
+    --field: #f6f8f9;
+    --ink: #16252a;
+    --ink2: #3b4d53;
+    --muted: #5b6d73;
+    --line: #d2dcdf;
+    --accent: #0b6b66;
+    --accent-hover: #0f857f;
+    --on-accent: #ffffff;
+    --accent-soft: #dbeeec;
+    --chip: #d6b24c;
+    --danger: #b3261e;
+    --on-danger: #ffffff;
+    --shadow: rgba(10, 30, 35, 0.14);
+    --font-body: "BIZ UDPGothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1618;
+      --surface: #162125;
+      --field: #101a1d;
+      --ink: #e2ebed;
+      --ink2: #c0cfd2;
+      --muted: #93a5aa;
+      --line: #2a393e;
+      --accent: #52c3b9;
+      --accent-hover: #7bd6ce;
+      --on-accent: #052421;
+      --accent-soft: #173836;
+      --chip: #c9a640;
+      --danger: #ff8a80;
+      --on-danger: #2a0705;
+      --shadow: rgba(0, 0, 0, 0.45);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1618;
+    --surface: #162125;
+    --field: #101a1d;
+    --ink: #e2ebed;
+    --ink2: #c0cfd2;
+    --muted: #93a5aa;
+    --line: #2a393e;
+    --accent: #52c3b9;
+    --accent-hover: #7bd6ce;
+    --on-accent: #052421;
+    --accent-soft: #173836;
+    --chip: #c9a640;
+    --danger: #ff8a80;
+    --on-danger: #2a0705;
+    --shadow: rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 30;
+    background: var(--surface);
+  }
+  button { font: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ヘッダー */
+  .top {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .top-in, .wrap {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .top-in { padding-block: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand svg { width: 26px; height: 32px; flex: none; }
+  h1 { font-size: 17px; margin: 0; line-height: 1.3; text-wrap: balance; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--bg); }
+  .tabs button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px var(--shadow); }
+  .count { font-size: 12px; line-height: 1.6; padding: 0 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  /* 切り替え */
+  .wrap { padding-block: 16px 48px; }
+  .layout { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .panel { display: none; min-width: 0; }
+  body[data-view="form"] #p-form,
+  body[data-view="stats"] #p-stats,
+  body[data-view="list"] #p-list { display: block; }
+  @media (min-width: 900px) {
+    .layout { grid-template-columns: 400px minmax(0, 1fr); }
+    #p-form { display: block; grid-row: 1 / span 2; }
+    #tab-form { display: none; }
+  }
+
+  /* 聞き取り票 */
+  .sheet {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .sheet-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 12px; border-bottom: 1px dashed var(--line); }
+  .sheet-h h2 { font-size: 16px; margin: 0; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .editing { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 13px; }
+  .row2 { display: grid; gap: 10px 12px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+  .f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .f > span, legend { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.03em; }
+  legend small { font-weight: 400; margin-left: 4px; }
+  input, select, textarea {
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+    background: var(--field);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    width: 100%;
+    min-width: 0;
+  }
+  textarea { resize: vertical; line-height: 1.6; }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.75; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  .unit { display: flex; align-items: center; flex: 1 1 150px; min-width: 0; background: var(--field); border: 1px solid var(--line); border-radius: 8px; }
+  .unit:focus-within { outline: 2px solid var(--accent); border-color: var(--accent); }
+  .unit input { border: 0; background: transparent; text-align: right; font-variant-numeric: tabular-nums; }
+  .unit input:focus-visible { outline: none; }
+  .unit i { font-style: normal; font-size: 12px; color: var(--muted); padding-right: 10px; white-space: nowrap; }
+  .fee-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { padding: 0; margin-bottom: 6px; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { position: relative; display: inline-flex; }
+  .chip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
+  .chip span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    font-size: 14px;
+    user-select: none;
+  }
+  .chip input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .multi .chip input:checked + span::before, .chip.check input:checked + span::before { content: "✓"; font-size: 12px; }
+  .chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sat-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .sat-row .chip span { width: 100%; justify-content: center; border-radius: 8px; padding: 8px 0; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sat-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .form-act { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; padding-top: 12px; border-top: 1px dashed var(--line); }
+  .btn {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 700;
+    padding: 10px 14px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.small { font-size: 13px; padding: 5px 12px; }
+  .btn.confirm { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tiny { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+
+  /* 集計 */
+  .note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; }
+  .note b { color: var(--accent); }
+  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 14px; }
+  .filters label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .filters select { width: auto; padding: 6px 10px; font-size: 15px; }
+  .kpis { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 14px; }
+  @media (max-width: 640px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .kpi > span { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .kpi b { font-size: 28px; line-height: 1.2; font-weight: 700; }
+  .kpi b small { font-size: 13px; color: var(--muted); margin-left: 2px; }
+  .kpi.hero b { font-size: 48px; line-height: 1.05; }
+  .kpi > small { font-size: 12px; color: var(--muted); }
+
+  .cards { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 760px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .card-h { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 12px; }
+  .card-h h2 { font-size: 15px; margin: 0; }
+  .seg { display: flex; padding: 3px; gap: 2px; border-radius: 8px; background: var(--bg); }
+  .seg button { border: 0; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 6px; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
+
+  /* 横棒グラフ */
+  .bars { display: flex; flex-direction: column; gap: 4px; }
+  .bar-row {
+    display: grid;
+    grid-template-columns: minmax(5.5em, 9.5em) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 3px 4px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .bars.has-x .bar-row { grid-template-columns: minmax(5.5em, 9.5em) minmax(0, 1fr) 6.5em; }
+  .bar-row:hover, .bar-row:focus-visible { background: var(--bg); }
+  .bar-row:hover .bf, .bar-row:focus-visible .bf { background: var(--accent-hover); }
+  .bl { color: var(--ink2); overflow-wrap: anywhere; line-height: 1.35; }
+  .bt { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .bf { height: 14px; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--accent); flex: none; }
+  .bv { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+  .bv small { color: var(--muted); margin-left: 4px; }
+  .bx { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+  .bars-head { display: grid; grid-template-columns: minmax(5.5em, 9.5em) minmax(0, 1fr) 6.5em; gap: 10px; padding: 0 4px 4px; font-size: 11px; color: var(--muted); }
+  .bars-head span:last-child { text-align: right; }
+  .bl .sub { display: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) {
+    .bars.has-x .bar-row, .bars-head { grid-template-columns: minmax(5.5em, 8em) minmax(0, 1fr); }
+    .bx, .bars-head span:last-child { display: none; }
+    .bl .sub { display: block; }
+  }
+  .none { font-size: 13px; color: var(--muted); margin: 4px 0; }
+
+  /* 縦棒（料金の分布） */
+  .cols { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+  .col { display: flex; flex-direction: column; align-items: stretch; border-radius: 6px; padding-top: 2px; }
+  .col:hover, .col:focus-visible { background: var(--bg); }
+  .col:hover .cf, .col:focus-visible .cf { background: var(--accent-hover); }
+  .cplot { height: 132px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+  .cv { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .cf { width: min(24px, 70%); border-radius: 4px 4px 0 0; background: var(--accent); }
+  .cl { font-size: 11px; color: var(--muted); text-align: center; padding: 4px 0 2px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .axis-note { margin: 6px 0 0; font-size: 11px; color: var(--muted); }
+
+  .textbox { margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tb-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tb-h h2 { font-size: 15px; margin: 0; }
+  #report {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--field);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.7;
+    font-variant-numeric: tabular-nums;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .loading { opacity: 0.55; }
+
+  /* 一覧 */
+  .list-h { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .list-h input { flex: 1 1 220px; }
+  #list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .item { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .item.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .item-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+  .item-top b { font-size: 15px; overflow-wrap: anywhere; }
+  .item-top span { font-size: 12px; color: var(--muted); }
+  .item-co { font-size: 14px; overflow-wrap: anywhere; }
+  .item-co b { font-size: 17px; font-variant-numeric: tabular-nums; }
+  .item-co small { color: var(--muted); }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+  .item-memo { margin: 0; font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
+  .item-act { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 2px; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .item-act .meta { margin-right: auto; font-size: 12px; color: var(--muted); }
+  .empty { padding: 28px 16px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; }
+  .empty b { display: block; color: var(--ink); margin-bottom: 4px; }
+
+  /* ツールチップ・トースト */
+  .tip {
+    position: fixed;
+    z-index: 50;
+    pointer-events: none;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    box-shadow: 0 6px 20px var(--shadow);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    max-width: 260px;
+  }
+  .tip b { display: block; font-size: 14px; }
+  .tip span { color: var(--muted); }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--surface);
+    font-size: 14px;
+    text-align: center;
+    opacity: 0;
+    transform: translate(-50%, 12px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body data-view="form">
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <svg viewBox="0 0 26 32" aria-hidden="true">
+        <path d="M1 4a3 3 0 0 1 3-3h12l9 9v18a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3z" fill="var(--accent)"/>
+        <rect x="6" y="20" width="3" height="6" fill="var(--chip)"/>
+        <rect x="11.5" y="15" width="3" height="11" fill="var(--chip)"/>
+        <rect x="17" y="11" width="3" height="15" fill="var(--chip)"/>
+      </svg>
+      <div>
+        <h1>スマホ聞き取り集計</h1>
+        <p>聞き取りした人の会社・料金・理由をまとめて集計します</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="表示の切り替え">
+      <button type="button" id="tab-form" role="tab" aria-selected="true" data-view="form">入力</button>
+      <button type="button" id="tab-stats" role="tab" aria-selected="false" data-view="stats">集計</button>
+      <button type="button" id="tab-list" role="tab" aria-selected="false" data-view="list">一覧 <span class="count" id="listCount">0</span></button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <section id="p-form" class="panel" aria-label="聞き取りの入力">
+      <form id="form" class="sheet" autocomplete="off" novalidate>
+        <div class="sheet-h"><h2 id="formTitle">聞き取りを追加</h2><span class="hint" id="formNo">1人目</span></div>
+        <div class="editing" id="editing" hidden><span id="editingText">編集中</span><button type="button" class="btn small" id="cancelEdit">編集をやめる</button></div>
+        <div class="row2">
+          <label class="f"><span>聞き取り日</span><input type="date" id="a-date"></label>
+          <label class="f"><span>呼び名（任意）</span><input id="a-nick" placeholder="例: Aさん"></label>
+        </div>
+        <fieldset id="q-age" data-single><legend>年代</legend><div class="chip-row"></div></fieldset>
+        <fieldset id="q-company" data-single><legend>使っている会社</legend><div class="chip-row"></div></fieldset>
+        <label class="f" id="otherWrap" hidden><span>会社名</span><input id="a-other" placeholder="例: IIJmio、mineo"></label>
+        <div class="f"><span>毎月の料金</span>
+          <div class="fee-row">
+            <span class="unit"><input id="a-fee" inputmode="numeric" placeholder="例: 3000" aria-label="毎月の料金"><i>円/月</i></span>
+            <label class="chip check"><input type="checkbox" id="a-dev"><span>端末代を含む</span></label>
+          </div>
+        </div>
+        <fieldset id="q-reasons" class="multi"><legend>その会社を選んだ理由<small>いくつでも</small></legend><div class="chip-row"></div></fieldset>
+        <label class="f"><span>理由のくわしい内容</span><textarea id="a-reasonText" rows="2" placeholder="例: 家族割で安くなると言われたから"></textarea></label>
+        <fieldset id="q-sat" data-single><legend>満足度</legend><div class="sat-row"></div><div class="sat-scale"><span>1 不満</span><span>5 満足</span></div></fieldset>
+        <fieldset id="q-intent" data-single><legend>乗り換えの意向</legend><div class="chip-row"></div></fieldset>
+        <label class="f"><span>メモ</span><textarea id="a-memo" rows="2" placeholder="例: 来年の機種変更で見直したい"></textarea></label>
+        <div class="form-act">
+          <button type="submit" class="btn primary" id="submit">追加する</button>
+          <button type="button" class="btn" id="reset">クリア</button>
+        </div>
+      </form>
+      <p class="tiny" id="storeNote">保存先を確認しています…</p>
+    </section>
+
+    <section id="p-stats" class="panel" aria-label="集計">
+      <div class="note" id="sampleNote" hidden><span><b>入力例</b>（9人分）で集計の見え方を表示しています。1人目を追加すると、あなたの聞き取り結果に切り替わります。</span></div>
+      <div class="filters">
+        <label for="fAge">年代で絞り込む
+          <select id="fAge"><option value="">すべて</option></select>
+        </label>
+        <span class="hint" id="fNote"></span>
+      </div>
+      <div id="statsBody">
+        <div class="kpis">
+          <div class="kpi hero"><span>聞き取りした人</span><b><span id="kN">0</span><small>人</small></b></div>
+          <div class="kpi"><span>平均の月額</span><b id="kAvg">–</b><small id="kMed">中央値 –</small></div>
+          <div class="kpi"><span>平均の満足度</span><b id="kSat">–</b><small id="kSatN">5段階</small></div>
+          <div class="kpi"><span>乗り換えを考えている</span><b id="kMove">–</b><small id="kMoveN">「乗り換えたい」「迷っている」</small></div>
+        </div>
+        <div class="cards">
+          <article class="card wide">
+            <div class="card-h">
+              <h2>使っている会社</h2>
+              <div class="seg" role="group" aria-label="会社のまとめ方">
+                <button type="button" data-group="brand" aria-pressed="true">ブランド別</button>
+                <button type="button" data-group="group" aria-pressed="false">会社グループ別</button>
+              </div>
+            </div>
+            <div id="cCo" class="bars has-x"></div>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2>選んだ理由</h2><span class="hint">複数回答・人数と割合</span></div>
+            <div id="cReason" class="bars"></div>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2>毎月の料金の分布</h2><span class="hint">人数・円/月</span></div>
+            <div id="cFee" class="cols"></div>
+            <p class="axis-note" id="feeNote"></p>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2>乗り換えの意向</h2></div>
+            <div id="cIntent" class="bars"></div>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2>年代</h2></div>
+            <div id="cAge" class="bars"></div>
+          </article>
+        </div>
+      </div>
+      <div class="textbox">
+        <div class="tb-h"><h2>まとめ文</h2><button type="button" class="btn small" id="copyReport">コピー</button></div>
+        <pre id="report"></pre>
+        <p class="tiny">レポートやLINE、メモにそのまま貼り付けられます。</p>
+      </div>
+    </section>
+
+    <section id="p-list" class="panel" aria-label="聞き取りの一覧">
+      <div class="list-h">
+        <input id="q" type="search" placeholder="会社・理由・メモで検索" aria-label="一覧を検索">
+        <button type="button" class="btn" id="copyTsv">表計算用にコピー</button>
+      </div>
+      <div id="list"></div>
+      <p class="tiny">「表計算用にコピー」は表示中の一覧をコピーします。Excelやスプレッドシートにそのまま貼り付けられます。</p>
+    </section>
+  </div>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const K_LOCAL = "phoneSurvey.answers";
+
+  const AGES = ["10代", "20代", "30代", "40代", "50代", "60代", "70代以上"];
+  const COMPANIES = ["ドコモ", "au", "ソフトバンク", "楽天モバイル", "ahamo", "povo", "LINEMO", "UQ mobile", "Y!mobile", "格安SIM", "その他"];
+  const NEEDS_NAME = ["格安SIM", "その他"];
+  const GROUP_OF = {
+    "ドコモ": "ドコモ系", "ahamo": "ドコモ系",
+    "au": "au系", "povo": "au系", "UQ mobile": "au系",
+    "ソフトバンク": "ソフトバンク系", "LINEMO": "ソフトバンク系", "Y!mobile": "ソフトバンク系",
+    "楽天モバイル": "楽天モバイル",
+  };
+  const GROUP_NOTE = { "ドコモ系": "ドコモ・ahamo", "au系": "au・povo・UQ mobile", "ソフトバンク系": "ソフトバンク・LINEMO・Y!mobile" };
+  const REASONS = ["料金が安い", "電波・通信速度が良い", "家族と同じ会社", "光回線・でんきとのセット", "ポイントがたまる・使える", "店舗・サポートが安心", "昔から使っている", "欲しい機種があった", "データ無制限", "キャンペーン・紹介"];
+  const INTENTS = ["乗り換えたい", "迷っている", "今のままでいい"];
+  const BUCKETS = [
+    { max: 2000, label: "〜1,999円", short: "2千未満" },
+    { max: 4000, label: "2,000〜3,999円", short: "2〜4千" },
+    { max: 6000, label: "4,000〜5,999円", short: "4〜6千" },
+    { max: 8000, label: "6,000〜7,999円", short: "6〜8千" },
+    { max: 10000, label: "8,000〜9,999円", short: "8千〜1万" },
+    { max: Infinity, label: "1万円以上", short: "1万以上" },
+  ];
+  const WEEK = "日月火水木金土";
+
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const pad = (n) => String(n).padStart(2, "0");
+  // 全角数字・カンマ・「円」などが混ざっていても数値として読む
+  const half = (s) => String(s ?? "").replace(/[０-９．]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+  const num = (s) => { const n = parseFloat(half(s).replace(/[^\d.]/g, "")); return Number.isFinite(n) ? n : 0; };
+  const yen = (n) => Math.round(n).toLocaleString("ja-JP") + "円";
+  const pct = (n, total) => (total ? Math.round((n / total) * 100) : 0) + "%";
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const fmtDate = (s, withYear = true) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || "");
+    if (!m) return s || "";
+    const d = new Date(+m[1], m[2] - 1, +m[3]);
+    return `${withYear ? m[1] + "/" : ""}${+m[2]}/${+m[3]}（${WEEK[d.getDay()]}）`;
+  };
+
+  const blank = () => ({ id: "", date: today(), nick: "", age: "", company: "", companyOther: "", fee: "", devIncl: false, reasons: [], reasonText: "", sat: 0, intent: "", memo: "", createdAt: 0, updatedAt: 0 });
+  // 共有データは信用しない: 形をそろえてから使う
+  const norm = (a) => {
+    const o = { ...blank(), ...(a && typeof a === "object" ? a : {}) };
+    for (const k of ["id", "date", "nick", "age", "company", "companyOther", "fee", "reasonText", "intent", "memo"]) o[k] = String(o[k] ?? "");
+    o.reasons = Array.isArray(o.reasons) ? o.reasons.filter((r) => typeof r === "string") : [];
+    o.sat = Math.max(0, Math.min(5, Math.round(Number(o.sat) || 0)));
+    o.devIncl = !!o.devIncl;
+    o.createdAt = Number(o.createdAt) || 0;
+    o.updatedAt = Number(o.updatedAt) || 0;
+    return o;
+  };
+  const coName = (a) => (NEEDS_NAME.includes(a.company) && a.companyOther ? `${a.company}（${a.companyOther}）` : a.company);
+
+  const SAMPLE = [
+    { age: "20代", company: "楽天モバイル", fee: "3278", reasons: ["料金が安い", "データ無制限"], sat: 4, intent: "今のままでいい", reasonText: "動画をよく見るので無制限がいい" },
+    { age: "40代", company: "ドコモ", fee: "8800", devIncl: true, reasons: ["電波・通信速度が良い", "家族と同じ会社"], sat: 3, intent: "迷っている" },
+    { age: "30代", company: "ahamo", fee: "2970", reasons: ["料金が安い"], sat: 5, intent: "今のままでいい" },
+    { age: "50代", company: "au", fee: "7500", reasons: ["光回線・でんきとのセット", "昔から使っている"], sat: 3, intent: "迷っている", reasonText: "セット割があるのでなかなか変えられない" },
+    { age: "20代", company: "Y!mobile", fee: "2365", reasons: ["料金が安い", "店舗・サポートが安心"], sat: 4, intent: "今のままでいい" },
+    { age: "60代", company: "ドコモ", fee: "5200", reasons: ["店舗・サポートが安心", "昔から使っている"], sat: 4, intent: "今のままでいい", reasonText: "わからないことを店で聞ける" },
+    { age: "10代", company: "UQ mobile", fee: "1980", reasons: ["家族と同じ会社"], sat: 3, intent: "迷っている" },
+    { age: "30代", company: "ソフトバンク", fee: "9800", devIncl: true, reasons: ["欲しい機種があった", "ポイントがたまる・使える"], sat: 2, intent: "乗り換えたい", reasonText: "端末代込みで高いので見直したい" },
+    { age: "40代", company: "povo", fee: "1500", reasons: ["料金が安い"], sat: 4, intent: "今のままでいい" },
+  ].map((a, i) => norm({ ...a, id: "sample" + i, date: today() }));
+
+  // ── 保存先: claude.ai 上では共有データベース、それ以外はこのブラウザ ──
+  let mode = "local";
+  let col = null;
+  let readOnly = false;
+  let loaded = false;
+  let answers = [];
+
+  function readLocal() {
+    try {
+      const v = JSON.parse(localStorage.getItem(K_LOCAL));
+      return Array.isArray(v) ? v.map(norm).filter((a) => a.id) : [];
+    } catch (e) { return []; }
+  }
+  function writeLocal(list) {
+    try { localStorage.setItem(K_LOCAL, JSON.stringify(list)); return true; } catch (e) { return false; }
+  }
+  function startLocal() {
+    mode = "local";
+    answers = readLocal();
+    loaded = true;
+    $("#storeNote").textContent = "入力した内容はこのブラウザの中だけに保存され、外部には送信されません。別の端末やブラウザとは共有されません。";
+    renderAll();
+  }
+  async function connect() {
+    const host = window.claude && typeof window.claude.use === "function";
+    if (!host) { startLocal(); return; }
+    let db = null;
+    try { db = await window.claude.use("db"); } catch (e) { db = null; }
+    if (!db) { startLocal(); return; }
+    mode = "db";
+    col = db.collection("answers");
+    $("#storeNote").textContent = "入力した内容はこのページに保存されます。このページを共有した人も、同じ聞き取り結果を見たり追加したりできます。";
+    col.onSnapshot(
+      (snap) => {
+        answers = snap.docs.filter((d) => d.exists).map((d) => norm({ ...d.data(), id: d.id }));
+        loaded = true;
+        renderAll();
+      },
+      () => {
+        readOnly = true;
+        loaded = true;
+        renderAll();
+        toast("データの読み込みが止まりました。ページを開き直してください");
+      },
+    );
+  }
+
+  async function put(a) {
+    if (mode === "db") {
+      const body = { ...a };
+      delete body.id;
+      const write = () => col.doc(a.id).set(body);
+      try {
+        await write();
+      } catch (e) {
+        if (e && e.code === "unavailable") {
+          await new Promise((r) => setTimeout(r, 600 + Math.random() * 600));
+          await write();
+        } else {
+          throw e;
+        }
+      }
+      return;
+    }
+    const next = answers.filter((x) => x.id !== a.id).concat([a]);
+    if (!writeLocal(next)) throw { code: "local" };
+    answers = next;
+    renderAll();
+  }
+  async function remove(id) {
+    if (mode === "db") { await col.doc(id).delete(); return; }
+    const next = answers.filter((x) => x.id !== id);
+    if (!writeLocal(next)) throw { code: "local" };
+    answers = next;
+    renderAll();
+  }
+  function saveError(e) {
+    const code = e && e.code;
+    if (code === "invalid_argument" || code === "not_granted") {
+      readOnly = true;
+      renderAll();
+      toast("このページでは追加・変更する権限がありません（見るだけ）");
+    } else if (code === "quota_exceeded") {
+      toast("保存できる件数の上限です。不要な聞き取りを削除してください");
+    } else if (code === "local") {
+      toast("このブラウザでは保存できません（プライベートモードなど）");
+    } else {
+      toast("保存できませんでした。少し待ってからもう一度押してください");
+    }
+  }
+
+  // ── 入力フォーム ──
+  const chip = (group, v, i, label = v) => `<label class="chip"><input type="checkbox" id="${group}-${i}" value="${esc(v)}"><span>${esc(label)}</span></label>`;
+  $("#q-age .chip-row").innerHTML = AGES.map((v, i) => chip("age", v, i)).join("");
+  $("#q-company .chip-row").innerHTML = COMPANIES.map((v, i) => chip("co", v, i)).join("");
+  $("#q-reasons .chip-row").innerHTML = REASONS.map((v, i) => chip("rs", v, i)).join("");
+  $("#q-sat .sat-row").innerHTML = [1, 2, 3, 4, 5].map((v, i) => chip("sat", String(v), i)).join("");
+  $("#q-intent .chip-row").innerHTML = INTENTS.map((v, i) => chip("it", v, i)).join("");
+  $("#fAge").innerHTML += AGES.map((v) => `<option>${v}</option>`).join("");
+
+  const picked = (id) => [...document.querySelectorAll(`#${id} input:checked`)].map((c) => c.value);
+  const setPicked = (id, values) => document.querySelectorAll(`#${id} input`).forEach((c) => { c.checked = values.includes(c.value); });
+  let editingId = "";
+
+  function readForm() {
+    return {
+      date: $("#a-date").value,
+      nick: $("#a-nick").value.trim(),
+      age: picked("q-age")[0] || "",
+      company: picked("q-company")[0] || "",
+      companyOther: $("#a-other").value.trim(),
+      fee: $("#a-fee").value.trim() ? String(num($("#a-fee").value)) : "",
+      devIncl: $("#a-dev").checked,
+      reasons: picked("q-reasons"),
+      reasonText: $("#a-reasonText").value.trim(),
+      sat: Number(picked("q-sat")[0] || 0),
+      intent: picked("q-intent")[0] || "",
+      memo: $("#a-memo").value.trim(),
+    };
+  }
+  function fillForm(a) {
+    $("#a-date").value = a.date || today();
+    $("#a-nick").value = a.nick;
+    setPicked("q-age", [a.age]);
+    setPicked("q-company", [a.company]);
+    $("#a-other").value = a.companyOther;
+    $("#a-fee").value = a.fee;
+    $("#a-dev").checked = a.devIncl;
+    setPicked("q-reasons", a.reasons);
+    $("#a-reasonText").value = a.reasonText;
+    setPicked("q-sat", a.sat ? [String(a.sat)] : []);
+    setPicked("q-intent", [a.intent]);
+    $("#a-memo").value = a.memo;
+    syncOther();
+  }
+  function syncOther() {
+    $("#otherWrap").hidden = !NEEDS_NAME.includes(picked("q-company")[0]);
+  }
+  function resetForm() {
+    const keepDate = $("#a-date").value || today();
+    editingId = "";
+    fillForm({ ...blank(), date: keepDate });
+    renderFormHead();
+  }
+  function renderFormHead() {
+    const editing = answers.find((a) => a.id === editingId);
+    if (editingId && !editing) editingId = "";
+    $("#editing").hidden = !editingId;
+    $("#formTitle").textContent = editingId ? "聞き取りを編集" : "聞き取りを追加";
+    $("#submit").textContent = editingId ? "変更を保存" : "追加する";
+    $("#formNo").textContent = editingId ? "" : `${answers.length + 1}人目`;
+    if (editing) $("#editingText").textContent = `${editing.nick || "名前なし"}・${coName(editing) || "会社未回答"} を編集中`;
+    $("#submit").disabled = readOnly;
+  }
+
+  const form = $("#form");
+  form.addEventListener("change", (e) => {
+    const fs = e.target.closest("fieldset[data-single]");
+    if (fs && e.target.checked) fs.querySelectorAll("input").forEach((c) => { if (c !== e.target) c.checked = false; });
+    if (e.target.closest("#q-company")) syncOther();
+    if (e.target.id === "a-fee" && /[0-9０-９]/.test(e.target.value)) e.target.value = String(num(e.target.value));
+  });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (readOnly) { toast("このページでは追加・変更する権限がありません（見るだけ）"); return; }
+    const v = readForm();
+    if (!v.company && !v.fee) { toast("「使っている会社」か「毎月の料金」を入れてください"); return; }
+    const now = Date.now();
+    const old = answers.find((a) => a.id === editingId);
+    const a = norm({
+      ...v,
+      id: old ? old.id : "a" + now.toString(36) + Math.random().toString(36).slice(2, 7),
+      createdAt: old ? old.createdAt : now,
+      updatedAt: now,
+    });
+    const btn = $("#submit");
+    btn.disabled = true;
+    try {
+      await put(a);
+      const wasEdit = !!old;
+      resetForm();
+      toast(wasEdit ? "変更を保存しました" : `追加しました（全${answers.length + (mode === "db" && !answers.some((x) => x.id === a.id) ? 1 : 0)}人）`);
+      if (!wasEdit) window.scrollTo({ top: 0 });
+    } catch (err) {
+      saveError(err);
+    } finally {
+      btn.disabled = readOnly;
+    }
+  });
+  $("#reset").addEventListener("click", resetForm);
+  $("#cancelEdit").addEventListener("click", () => { resetForm(); renderList(); });
+
+  // ── 集計 ──
+  let groupMode = "brand";
+  const ageFilter = () => $("#fAge").value;
+  const showingSample = () => loaded && answers.length === 0;
+  const source = () => {
+    const base = showingSample() ? SAMPLE : answers;
+    const age = ageFilter();
+    return age ? base.filter((a) => a.age === age) : base;
+  };
+
+  function calc(list) {
+    const n = list.length;
+    const fees = list.map((a) => num(a.fee)).filter((f) => f > 0).sort((x, y) => x - y);
+    const sum = fees.reduce((s, f) => s + f, 0);
+    const avg = fees.length ? sum / fees.length : 0;
+    const mid = fees.length >> 1;
+    const med = fees.length ? (fees.length % 2 ? fees[mid] : (fees[mid - 1] + fees[mid]) / 2) : 0;
+    const sats = list.map((a) => a.sat).filter((s) => s >= 1);
+    const keyOf = (a) => (!a.company ? "未回答" : groupMode === "group" ? GROUP_OF[a.company] || a.company : a.company);
+    const coMap = new Map();
+    for (const a of list) {
+      const k = keyOf(a);
+      if (!coMap.has(k)) coMap.set(k, []);
+      coMap.get(k).push(a);
+    }
+    const order = (k) => { const i = COMPANIES.indexOf(k); return i < 0 ? 99 : i; };
+    const co = [...coMap.entries()].map(([key, rows]) => {
+      const f = rows.map((a) => num(a.fee)).filter((x) => x > 0);
+      const rc = REASONS.map((r) => [r, rows.filter((a) => a.reasons.includes(r)).length]).filter(([, c]) => c).sort((x, y) => y[1] - x[1]);
+      const others = [...new Set(rows.map((a) => a.companyOther).filter(Boolean))];
+      return { key, count: rows.length, feeAvg: f.length ? f.reduce((s, x) => s + x, 0) / f.length : 0, topReason: rc[0] ? rc[0][0] : "", others };
+    }).sort((x, y) => y.count - x.count || (x.key === "未回答") - (y.key === "未回答") || order(x.key) - order(y.key));
+    const reasons = REASONS.map((r) => ({ key: r, count: list.filter((a) => a.reasons.includes(r)).length })).filter((r) => r.count).sort((x, y) => y.count - x.count);
+    const buckets = BUCKETS.map((b, i) => ({ ...b, count: fees.filter((f) => f < b.max && f >= (i ? BUCKETS[i - 1].max : 0)).length }));
+    const intents = INTENTS.map((k) => ({ key: k, count: list.filter((a) => a.intent === k).length }));
+    const ages = AGES.map((k) => ({ key: k, count: list.filter((a) => a.age === k).length }));
+    return {
+      n, fees, avg, med, co, reasons, buckets, intents, ages,
+      sat: sats.length ? sats.reduce((s, x) => s + x, 0) / sats.length : 0,
+      satN: sats.length,
+      intentN: intents.reduce((s, x) => s + x.count, 0),
+      move: intents[0].count + intents[1].count,
+      devIncl: list.filter((a) => a.devIncl && num(a.fee) > 0).length,
+    };
+  }
+
+  function barRows(rows, total, opts = {}) {
+    const max = Math.max(1, ...rows.map((r) => r.count));
+    return rows.map((r) => {
+      const w = r.count / max;
+      return `<div class="bar-row" tabindex="0" data-tv="${esc(`${r.count}人（${pct(r.count, total)}）`)}" data-tl="${esc(r.tip || r.key)}">
+        <span class="bl">${esc(r.key)}${opts.x ? `<span class="sub">平均 ${esc(r.x)}</span>` : ""}</span>
+        <span class="bt"><span class="bf" style="width:calc((100% - 5.5em) * ${w.toFixed(4)})"></span><span class="bv">${r.count}人<small>${pct(r.count, total)}</small></span></span>
+        ${opts.x ? `<span class="bx">${esc(r.x)}</span>` : ""}
+      </div>`;
+    }).join("");
+  }
+
+  function renderStats() {
+    const sample = showingSample();
+    $("#sampleNote").hidden = !sample;
+    $("#statsBody").classList.toggle("loading", !loaded);
+    const list = source();
+    const s = calc(list);
+    const age = ageFilter();
+    $("#fNote").textContent = loaded ? (age ? `${age}の ${s.n}人を表示中` : `${s.n}人を表示中`) : "読み込み中…";
+
+    $("#kN").textContent = s.n;
+    $("#kAvg").textContent = s.fees.length ? yen(s.avg) : "–";
+    $("#kMed").textContent = s.fees.length ? `中央値 ${yen(s.med)}` : "料金の回答なし";
+    $("#kSat").innerHTML = s.satN ? `${s.sat.toFixed(1)}<small>/5</small>` : "–";
+    $("#kSatN").textContent = s.satN ? `${s.satN}人が回答` : "5段階";
+    $("#kMove").innerHTML = s.intentN ? `${s.move}<small>人</small>` : "–";
+    $("#kMoveN").textContent = s.intentN ? `回答した${s.intentN}人のうち${pct(s.move, s.intentN)}` : "「乗り換えたい」「迷っている」";
+
+    $("#cCo").innerHTML = s.co.length
+      ? `<div class="bars-head"><span>会社</span><span>人数</span><span>平均の月額</span></div>` + barRows(s.co.map((c) => ({
+        ...c,
+        x: c.feeAvg ? yen(c.feeAvg) : "–",
+        tip: [c.key, GROUP_NOTE[c.key] && `（${GROUP_NOTE[c.key]}）`, c.others.length && `：${c.others.join("・")}`].filter(Boolean).join("")
+          + (c.feeAvg ? ` / 平均 ${yen(c.feeAvg)}` : "") + (c.topReason ? ` / 多い理由: ${c.topReason}` : ""),
+      })), s.n, { x: true })
+      : `<p class="none">まだ回答がありません</p>`;
+    $("#cReason").innerHTML = s.reasons.length ? barRows(s.reasons, s.n) : `<p class="none">理由の回答がありません</p>`;
+    $("#cIntent").innerHTML = s.intentN ? barRows(s.intents, s.intentN) : `<p class="none">乗り換えの意向の回答がありません</p>`;
+    $("#cAge").innerHTML = s.ages.some((x) => x.count) ? barRows(s.ages.filter((x) => x.count), s.n) : `<p class="none">年代の回答がありません</p>`;
+
+    const bmax = Math.max(1, ...s.buckets.map((b) => b.count));
+    $("#cFee").innerHTML = s.buckets.map((b) => `<div class="col" tabindex="0" data-tv="${b.count}人（${pct(b.count, s.fees.length)}）" data-tl="${esc(b.label)}">
+        <div class="cplot"><span class="cv">${b.count || ""}</span><span class="cf" style="height:${Math.round((b.count / bmax) * 104)}px"></span></div>
+        <div class="cl">${esc(b.short)}</div>
+      </div>`).join("");
+    $("#feeNote").textContent = s.fees.length
+      ? `最安 ${yen(s.fees[0])}・最高 ${yen(s.fees[s.fees.length - 1])}${s.devIncl ? `。端末代込みで答えた人が${s.devIncl}人います` : ""}`
+      : "料金の回答がありません";
+
+    $("#report").textContent = report(list, s, sample);
+  }
+
+  function report(list, s, sample) {
+    const age = ageFilter();
+    const head = `【${sample ? "入力例・" : ""}スマホ聞き取り結果】${fmtDate(today())}時点・${s.n}人${age ? `（${age}）` : ""}`;
+    if (!s.n) return `${head}\nまだ聞き取り結果がありません。`;
+    const L = [head, "", "■使っている会社"];
+    s.co.forEach((c) => L.push(`${c.key}${c.others.length ? `（${c.others.join("・")}）` : ""} ${c.count}人（${pct(c.count, s.n)}）${c.feeAvg ? `　平均 ${yen(c.feeAvg)}/月` : ""}`));
+    if (s.fees.length) {
+      L.push("", "■毎月の料金", `平均 ${yen(s.avg)}／中央値 ${yen(s.med)}（最安 ${yen(s.fees[0])}・最高 ${yen(s.fees[s.fees.length - 1])}）`);
+      if (s.devIncl) L.push(`※端末代込みで答えた人 ${s.devIncl}人`);
+    }
+    if (s.reasons.length) {
+      L.push("", "■選んだ理由（複数回答）");
+      s.reasons.forEach((r, i) => L.push(`${i + 1}. ${r.key} ${r.count}人（${pct(r.count, s.n)}）`));
+    }
+    if (s.satN) L.push("", `■満足度 平均 ${s.sat.toFixed(1)}／5（${s.satN}人が回答）`);
+    if (s.intentN) L.push("", "■乗り換えの意向", s.intents.map((x) => `${x.key} ${x.count}人`).join("・"));
+    const voices = [...list].sort((x, y) => y.updatedAt - x.updatedAt).filter((a) => a.reasonText).slice(0, 5);
+    if (voices.length) {
+      L.push("", "■主な声");
+      voices.forEach((a) => L.push(`・${a.reasonText}（${[a.age, coName(a)].filter(Boolean).join("・")}）`));
+    }
+    return L.join("\n");
+  }
+
+  // ── 一覧 ──
+  const sorted = () => [...answers].sort((x, y) => (y.date || "").localeCompare(x.date || "") || y.createdAt - x.createdAt);
+  function filtered() {
+    const q = half($("#q").value).trim().toLowerCase();
+    const rows = sorted();
+    if (!q) return rows;
+    return rows.filter((a) => half([a.nick, a.age, a.company, a.companyOther, a.reasonText, a.memo, a.intent, ...a.reasons].join(" ")).toLowerCase().includes(q));
+  }
+  function renderList() {
+    $("#listCount").textContent = answers.length;
+    const el = $("#list");
+    if (!loaded) { el.innerHTML = `<div class="empty"><b>読み込み中…</b></div>`; return; }
+    if (!answers.length) {
+      el.innerHTML = `<div class="empty"><b>まだ聞き取り結果はありません</b>「入力」で会社や料金、理由を選んで「追加する」を押すと、ここに並びます。</div>`;
+      return;
+    }
+    const rows = filtered();
+    if (!rows.length) {
+      el.innerHTML = `<div class="empty"><b>「${esc($("#q").value)}」に合う聞き取りはありません</b>別のことばで検索してください。</div>`;
+      return;
+    }
+    el.innerHTML = rows.map((a) => `<article class="item${a.id === editingId ? " active" : ""}" data-id="${esc(a.id)}">
+        <div class="item-top"><b>${esc(a.nick || "名前なし")}</b>${a.age ? `<span>${esc(a.age)}</span>` : ""}<span>${esc(fmtDate(a.date, false))}</span></div>
+        <div class="item-co">${esc(coName(a) || "会社未回答")}${num(a.fee) ? `　<b>${yen(num(a.fee))}</b><small>/月${a.devIncl ? "（端末代込み）" : ""}</small>` : ""}</div>
+        ${a.reasons.length ? `<div class="tags">${a.reasons.map((r) => `<span class="tag">${esc(r)}</span>`).join("")}</div>` : ""}
+        ${a.reasonText ? `<p class="item-memo">「${esc(a.reasonText)}」</p>` : ""}
+        ${a.memo ? `<p class="item-memo">メモ: ${esc(a.memo)}</p>` : ""}
+        <div class="item-act">
+          <span class="meta">${[a.sat ? `満足度 ${a.sat}/5` : "", a.intent].filter(Boolean).map(esc).join("・")}</span>
+          ${readOnly ? "" : `<button type="button" class="btn small" data-del>削除</button><button type="button" class="btn small primary" data-edit>編集</button>`}
+        </div>
+      </article>`).join("");
+  }
+
+  $("#list").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    const item = e.target.closest(".item");
+    if (!btn || !item) return;
+    const a = answers.find((x) => x.id === item.dataset.id);
+    if (!a) return;
+    if (btn.hasAttribute("data-edit")) {
+      editingId = a.id;
+      fillForm(a);
+      renderFormHead();
+      renderList();
+      if (!wide.matches) setView("form");
+      $("#p-form").scrollIntoView({ block: "start" });
+    } else if (btn.hasAttribute("data-del")) {
+      if (!arm(btn, "本当に削除")) return;
+      try {
+        await remove(a.id);
+        if (editingId === a.id) resetForm();
+        toast("削除しました");
+      } catch (err) {
+        saveError(err);
+      }
+    }
+  });
+
+  // 2回押しで確定するボタン（ダイアログの代わり）
+  function arm(btn, label) {
+    if (btn.classList.contains("confirm")) return true;
+    const orig = btn.textContent;
+    btn.classList.add("confirm");
+    btn.textContent = label;
+    setTimeout(() => { if (btn.isConnected) { btn.classList.remove("confirm"); btn.textContent = orig; } }, 3000);
+    return false;
+  }
+
+  // ── コピー ──
+  function copy(text, okMsg) {
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      ta.remove();
+      toast(ok ? okMsg : "コピーできませんでした。文字を長押しして選択してください");
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast(okMsg), fallback);
+    else fallback();
+  }
+  $("#copyReport").addEventListener("click", () => copy($("#report").textContent, "まとめ文をコピーしました"));
+  $("#copyTsv").addEventListener("click", () => {
+    const rows = filtered();
+    if (!rows.length) { toast("コピーする聞き取りがありません"); return; }
+    const cell = (v) => String(v ?? "").replace(/[\t\r\n]+/g, " ");
+    const head = ["聞き取り日", "呼び名", "年代", "会社", "会社名", "月額（円）", "端末代込み", "選んだ理由", "理由のくわしい内容", "満足度", "乗り換えの意向", "メモ"];
+    const body = rows.map((a) => [a.date, a.nick, a.age, a.company, a.companyOther, a.fee, a.devIncl ? "はい" : "", a.reasons.join("、"), a.reasonText, a.sat || "", a.intent, a.memo].map(cell).join("\t"));
+    copy([head.join("\t"), ...body].join("\n"), `${rows.length}人分をコピーしました。表計算ソフトに貼り付けできます`);
+  });
+
+  // ── ツールチップ（グラフの棒） ──
+  const tip = $("#tip");
+  function showTip(el, x, y) {
+    tip.innerHTML = "";
+    const b = document.createElement("b");
+    b.textContent = el.dataset.tv;
+    const s = document.createElement("span");
+    s.textContent = el.dataset.tl;
+    tip.append(b, s);
+    tip.hidden = false;
+    const r = tip.getBoundingClientRect();
+    const left = Math.min(Math.max(8, x + 12), innerWidth - r.width - 8);
+    const top = y - r.height - 12 < 8 ? y + 16 : y - r.height - 12;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+  const hideTip = () => { tip.hidden = true; };
+  const statsPanel = $("#p-stats");
+  statsPanel.addEventListener("pointermove", (e) => {
+    const el = e.target.closest("[data-tv]");
+    if (el) showTip(el, e.clientX, e.clientY); else hideTip();
+  });
+  statsPanel.addEventListener("pointerleave", hideTip);
+  statsPanel.addEventListener("focusin", (e) => {
+    const el = e.target.closest("[data-tv]");
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    showTip(el, r.left + r.width / 2, r.top);
+  });
+  statsPanel.addEventListener("focusout", hideTip);
+  addEventListener("scroll", hideTip, { passive: true });
+
+  // ── 表示の切り替え ──
+  const wide = matchMedia("(min-width: 900px)");
+  let view = "form";
+  function setView(v) {
+    view = v;
+    const shown = wide.matches && v === "form" ? "stats" : v;
+    document.body.dataset.view = shown;
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === shown)));
+    hideTip();
+  }
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => { setView(b.dataset.view); window.scrollTo({ top: 0 }); }));
+  wide.addEventListener("change", () => setView(view));
+  document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
+    groupMode = b.dataset.group;
+    document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderStats();
+  }));
+  $("#fAge").addEventListener("change", renderStats);
+  $("#q").addEventListener("input", renderList);
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+
+  function renderAll() {
+    renderFormHead();
+    renderStats();
+    renderList();
+  }
+
+  resetForm();
+  setView(location.hash === "#list" ? "list" : location.hash === "#stats" ? "stats" : "form");
+  renderAll();
+  connect();
+})();
+</script>
+</body>
+</html>
